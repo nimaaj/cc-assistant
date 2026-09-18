@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
+    "assistant:doctor": "node scripts/doctor.mjs",
     "cca": "node apps/cli/dist/index.js",
     "dev": "pnpm --parallel --filter @cc-assistant/daemon --filter @cc-assistant/web dev",
     "dev:daemon": "pnpm --filter @cc-assistant/daemon dev",

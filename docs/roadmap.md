@@ -49,4 +49,5 @@
 - [x] Package the MCP and hooks as an installable Claude Code plugin.
 - [x] Generate and manage per-user macOS LaunchAgents for the daemon and notification watcher.
 - [x] Add an opt-in signed-in end-to-end runner for controlled Calendar/Slack test accounts; injected Agent SDK contracts run in `pnpm test`.
+- [x] Expose browser jobs, trigger rules, safe command proposals, abilities, and clipboard images in the dashboard control surface.
 - Add a semantic/vector implementation of the existing memory search-provider interface when the separate memory project begins.

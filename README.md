@@ -14,11 +14,11 @@ A local-first assistant control plane for Claude Code: durable state, managed ag
 - Full-text wiki memory ingest, recall, search, and revision-safe editing.
 - Versioned ability manifests whose invocations use the command approval path.
 - Bounded Claude-in-Chrome jobs for signed-in Google Calendar and Slack tabs; browser writes require approval.
-- macOS/Linux desktop notifications and clipboard-image reads.
+- macOS/Linux desktop notifications and clipboard-image reads; macOS TIFF clipboard content is normalized to PNG.
 - Claude Code MCP tools for every capability above.
 - Claude Code lifecycle hooks and live session-state tracking.
 - A developer CLI for state inspection, mutation, export, and raw API calls.
-- A responsive dashboard for tasks, sessions, runs, approvals, reminders, notifications, and memory capture.
+- A responsive dashboard for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, and clipboard images.
 
 ## Requirements
 
@@ -34,9 +34,26 @@ pnpm build
 pnpm dev
 ```
 
-The daemon listens on `127.0.0.1:4317` and the dashboard on [http://127.0.0.1:4318](http://127.0.0.1:4318).
+In development, the daemon listens on `127.0.0.1:4317` and Vite serves the hot-reloading dashboard on [http://127.0.0.1:4318](http://127.0.0.1:4318).
 
 On first launch, the daemon generates `.data/access-token`. Paste its contents into the dashboard login screen. The browser receives an HTTP-only, same-site cookie; the token is not stored in browser JavaScript storage.
+
+After building and starting the daemon, run the read-only readiness check:
+
+```bash
+pnpm assistant:doctor
+```
+
+It verifies build/plugin artifacts, Node and Claude Code, private token permissions, daemon authentication, Claude-in-Chrome worker state, and platform-native helpers. Use `pnpm assistant:doctor --offline` when inspecting a package before starting the daemon, or `--json` for scripts.
+
+## Start the production service
+
+```bash
+pnpm build
+pnpm start
+```
+
+The production daemon serves both the authenticated API and the built dashboard at [http://127.0.0.1:4317](http://127.0.0.1:4317). No Vite process is required. The macOS LaunchAgent uses this production entrypoint, so the dashboard remains available after login whenever that service is installed.
 
 ## Connect Claude Code
 
@@ -106,7 +123,9 @@ The CLI deliberately does not write directly to SQLite. Direct database writes w
 
 There is deliberately no Calendar or Slack API credential path and no cc-assistant browser extension. Install and sign in to Claude Code's official **Claude in Chrome** integration, then keep signed-in `calendar.google.com` and `app.slack.com` tabs available in that Chrome profile. The daemon invokes the Agent SDK with Chrome enabled for each narrow job.
 
-Read jobs execute in the visible browser profile. Creating a calendar event or sending a Slack message first appears in the dashboard approval queue. The worker receives only Claude-in-Chrome tools, the exact validated job, a turn limit, and a spending cap. It treats rendered content as untrusted and fails closed on missing tabs, login screens, ambiguous targets, or unverifiable writes rather than reporting an empty calendar or pretending a message was sent.
+Read jobs execute in the visible browser profile. Creating a calendar event or sending a Slack message first appears in the dashboard approval queue. The worker receives only Claude-in-Chrome tools, the exact validated job, a turn limit, and a spending cap. It treats rendered content as untrusted and fails closed on missing tabs, login screens, ambiguous targets, or unverifiable writes rather than reporting an empty calendar or pretending a message was sent. A write is not recorded as successful unless the structured result explicitly contains `data.created=true` or `data.sent=true` for the corresponding operation.
+
+The dashboard's **Calendar & Slack** section starts read jobs and proposes exact writes. Recent jobs retain their structured result or diagnostic. The same page also manages time and notification triggers, proposes shell-free local commands, installs and invokes ability manifests, and previews a local clipboard image; all command-like operations still pass through the persisted one-time approval queue.
 
 Defaults are intentionally bounded and can be changed in the daemon environment:
 
@@ -132,6 +151,8 @@ pnpm native:watch-notifications
 ```
 
 macOS will request Accessibility permission for the terminal running the watcher. A `system_notification` trigger requires at least one `app`, `title`, or `body` substring and has a default 60-second cooldown. The watcher makes a best-effort extraction of the source app, title, and body from the visible banner. This adapter is experimental because Notification Center accessibility structure can change between macOS releases.
+
+The watcher waits for a successful daemon response before marking a visible banner as delivered. Network failures and daemon-startup races are logged and retried while that banner remains visible; schedule cooldowns prevent a successful delivery from looping immediately.
 
 For persistent per-user services on the Mac, build once and install the generated LaunchAgents:
 
@@ -170,6 +191,8 @@ When the daemon is stopped, backing up `.data/assistant.sqlite` is sufficient. W
 ## Verification
 
 `pnpm test` runs repository/API/integration tests, including an injected Claude-in-Chrome stream that verifies tool isolation, structured results, and limits without touching live accounts. `pnpm typecheck` first refreshes internal package declarations and then checks every workspace package. `pnpm build` produces all daemon, MCP, CLI, and web artifacts.
+
+`pnpm assistant:doctor` is the final local preflight. It is diagnostic only: it does not install services, access Calendar or Slack content, read the clipboard, or perform account writes.
 
 See [`docs/completion-audit.md`](./docs/completion-audit.md) for the requirement-by-requirement evidence matrix and the live checks that require signed-in accounts or a macOS host.
 

@@ -26,6 +26,9 @@ describe("NativeService", () => {
       mimeType: "image/png", base64: png.toString("base64"),
     });
     expect(runner.mock.calls[0]?.[0]).toBe("osascript");
+    const script = runner.mock.calls[0]?.[1]?.[3];
+    expect(script).toContain("dataForType('public.tiff')");
+    expect(script).toContain("NSBitmapImageFileTypePNG");
   });
 
   it("falls back from Wayland to xclip on Linux", async () => {

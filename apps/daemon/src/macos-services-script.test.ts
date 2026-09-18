@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const projectRoot = resolve(import.meta.dirname, "../../..");
 const script = resolve(projectRoot, "scripts/install-macos-services.mjs");
+const watcher = resolve(projectRoot, "native/macos/notification-watcher.swift");
 
 describe("macOS service installer", () => {
   it("renders both per-user LaunchAgents without mutating the host", () => {
@@ -27,5 +29,12 @@ describe("macOS service installer", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--dry-run");
     expect(result.stdout).toContain("--remove");
+  });
+
+  it("retries visible notifications until the daemon acknowledges delivery", () => {
+    const source = readFileSync(watcher, "utf8");
+    expect(source).toContain("(200..<300).contains(http.statusCode)");
+    expect(source).toContain("it will be retried while visible");
+    expect(source).toContain("seen = delivered.intersection(current)");
   });
 });

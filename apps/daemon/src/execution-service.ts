@@ -383,6 +383,7 @@ export class ExecutionService {
       const active = this.#active.get(run.id);
       if (active) active.close = () => stream.close();
 
+      let receivedResult = false;
       for await (const message of stream) {
         if ("session_id" in message && typeof message.session_id === "string") {
           const latest = this.#repository.getRun(run.id);
@@ -394,6 +395,7 @@ export class ExecutionService {
           this.#repository.appendLog(run.id, "info", text.slice(0, 50_000));
         }
         if (message.type === "result") {
+          receivedResult = true;
           if (message.subtype === "success" && !message.is_error) {
             this.#repository.updateRun(run.id, {
               status: "succeeded",
@@ -411,6 +413,7 @@ export class ExecutionService {
           }
         }
       }
+      if (!receivedResult) throw new Error("Claude run ended without a terminal result");
     } catch (error) {
       const latest = this.#repository.getRun(run.id);
       if (latest?.status !== "cancelled") {

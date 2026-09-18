@@ -1,4 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import cookie from "@fastify/cookie";
 import {
   ApprovalSchema,
@@ -17,7 +19,7 @@ import {
   UpdateScheduleSchema,
   UpdateTaskSchema,
 } from "@cc-assistant/shared";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { z } from "zod";
 import type { DaemonConfig } from "./config.js";
 import { AssistantRepository, ScheduleNotFoundError, ScheduleRevisionConflictError } from "./assistant-repository.js";
@@ -76,6 +78,27 @@ export interface AppDependencies {
   nativeService?: NativeService;
   memoryRepository?: MemoryRepository;
   eventHub?: EventHub;
+  webRoot?: string;
+}
+
+const staticContentTypes = new Map([
+  [".css", "text/css; charset=utf-8"],
+  [".html", "text/html; charset=utf-8"],
+  [".ico", "image/x-icon"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".js", "text/javascript; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
+  [".png", "image/png"],
+  [".svg", "image/svg+xml"],
+  [".webp", "image/webp"],
+  [".woff", "font/woff"],
+  [".woff2", "font/woff2"],
+]);
+
+function isWithin(candidate: string, root: string): boolean {
+  const path = relative(root, candidate);
+  return path === "" || (!path.startsWith("..") && !isAbsolute(path));
 }
 
 export async function buildApp(dependencies: AppDependencies): Promise<FastifyInstance> {
@@ -102,6 +125,7 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   const nativeService = dependencies.nativeService ?? new NativeService();
   const memoryRepository = dependencies.memoryRepository ??
     new MemoryRepository(dependencies.config.databasePath, (event) => eventHub.publish(event));
+  const webRoot = resolve(dependencies.webRoot ?? resolve(import.meta.dirname, "../../web/dist"));
   const automationService = dependencies.automationService ??
     new AutomationService(assistantRepository, executionService, nativeService, dependencies.config);
   const browserAutomationService = dependencies.browserAutomationService ??
@@ -117,7 +141,9 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
       return reply.code(400).send({ error: "invalid_host", message: "Host is not allowed" });
     }
 
-    if (request.url === "/api/health" || request.url === "/api/session") return;
+    const pathname = request.url.split("?", 1)[0] ?? request.url;
+    if (!pathname.startsWith("/api/") && pathname !== "/api") return;
+    if (pathname === "/api/health" || pathname === "/api/session") return;
 
     const candidate =
       tokenFromAuthorization(request.headers.authorization) ?? request.cookies.cc_assistant_session;
@@ -164,6 +190,30 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
 
     app.log.error(error);
     return reply.code(500).send({ error: "internal_error", message: "Unexpected server error" });
+  });
+
+  async function sendStatic(reply: FastifyReply, path: string, cache = false) {
+    const candidate = resolve(webRoot, path);
+    if (!isWithin(candidate, webRoot)) {
+      return reply.code(404).send({ error: "asset_not_found", message: "Asset was not found" });
+    }
+    try {
+      const body = await readFile(candidate);
+      reply.type(staticContentTypes.get(extname(candidate).toLowerCase()) ?? "application/octet-stream");
+      reply.header("Cache-Control", cache ? "public, max-age=31536000, immutable" : "no-cache");
+      return reply.send(body);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return reply.code(404).send({ error: "asset_not_found", message: "Asset was not found" });
+      }
+      throw error;
+    }
+  }
+
+  app.get("/", async (_request, reply) => sendStatic(reply, "index.html"));
+  app.get("/assets/*", async (request, reply) => {
+    const path = z.object({ "*": z.string().min(1) }).parse(request.params)["*"];
+    return sendStatic(reply, join("assets", path), true);
   });
 
   app.get("/api/health", async () => ({

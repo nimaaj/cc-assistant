@@ -1,15 +1,36 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { type Approval, type AssistantNotification, type BrowserAutomationStatus, type ClaudeSession, type Memory, type MemoryLink, type Run, type Schedule, type Task, type TaskStatus } from "@cc-assistant/shared";
+import {
+  type AbilityManifest,
+  type Approval,
+  type AssistantNotification,
+  type BrowserAutomationStatus,
+  type BrowserJob,
+  type ClaudeSession,
+  type Memory,
+  type MemoryLink,
+  type Run,
+  type Schedule,
+  type ScheduleActionKind,
+  type ScheduleTriggerKind,
+  type Task,
+  type TaskStatus,
+} from "@cc-assistant/shared";
 import {
   AuthenticationError,
   archiveMemory,
   cancelRun,
+  createBrowserJob,
   createMemory,
   createReminder,
+  createSchedule,
   createTask,
   getConfig,
   getBrowserStatus,
   getMemoryBundle,
+  installAbility,
+  invokeAbility,
+  listAbilities,
+  listBrowserJobs,
   listMemories,
   listNotifications,
   listPendingApprovals,
@@ -20,10 +41,13 @@ import {
   login,
   logout,
   markNotificationRead,
+  proposeCommand,
+  readClipboardImage,
   resolveApproval,
   searchMemories,
   startAgent,
   updateMemory,
+  updateSchedule,
   updateTask,
 } from "./api.js";
 
@@ -50,6 +74,31 @@ function formatRelative(value: string): string {
     if (Math.abs(seconds) >= size) return formatter.format(Math.round(seconds / size), unit);
   }
   return "just now";
+}
+
+function localDateValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseJsonObject(value: string, label: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(`${label} must be valid JSON`);
+  }
+  if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function resultText(value: unknown): string {
+  if (value === null || value === undefined) return "No result yet";
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
 function Login({ onAuthenticated }: { onAuthenticated: () => void }): React.JSX.Element {
@@ -326,6 +375,218 @@ function AssistantTools({
   </section>;
 }
 
+function BrowserWorkspace({
+  status,
+  jobs,
+  onChange,
+}: {
+  status: BrowserAutomationStatus;
+  jobs: BrowserJob[];
+  onChange: () => void;
+}): React.JSX.Element {
+  const [calendarDate, setCalendarDate] = useState(localDateValue());
+  const [calendarView, setCalendarView] = useState<"day" | "week" | "month">("day");
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventStart, setEventStart] = useState("");
+  const [eventEnd, setEventEnd] = useState("");
+  const [channel, setChannel] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const run = async (action: () => Promise<void>): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await action();
+      onChange();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Browser request failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <section className="integration-workspace">
+    <div className="section-heading">
+      <div><p className="eyebrow">Signed-in browser</p><h2>Calendar &amp; Slack</h2></div>
+      <span>{status.enabled ? status.state : "disabled"} · {jobs.length} jobs</span>
+    </div>
+    {error ? <p className="error banner">{error}</p> : null}
+    <div className="integration-grid">
+      <article className="control-card">
+        <h3>Google Calendar</h3>
+        <p>Reads run immediately. Creating an event enters the one-time approval queue.</p>
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => createBrowserJob({ adapter: "google_calendar", action: "list_events", input: { date: calendarDate, view: calendarView } })); }}>
+          <div className="inline-fields"><input aria-label="Calendar date" type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} /><select aria-label="Calendar view" value={calendarView} onChange={(event) => setCalendarView(event.target.value as typeof calendarView)}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></div>
+          <button disabled={busy || !calendarDate}>Check calendar</button>
+        </form>
+        <form onSubmit={(event) => { event.preventDefault(); void run(async () => {
+          await createBrowserJob({ adapter: "google_calendar", action: "create_event", input: { title: eventTitle, start: new Date(eventStart).toISOString(), end: new Date(eventEnd).toISOString() } });
+          setEventTitle(""); setEventStart(""); setEventEnd("");
+        }); }}>
+          <input aria-label="Calendar event title" placeholder="Event title" value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} />
+          <div className="inline-fields"><input aria-label="Calendar event start" type="datetime-local" value={eventStart} onChange={(event) => setEventStart(event.target.value)} /><input aria-label="Calendar event end" type="datetime-local" value={eventEnd} onChange={(event) => setEventEnd(event.target.value)} /></div>
+          <button className="primary" disabled={busy || !eventTitle || !eventStart || !eventEnd}>Request event creation</button>
+        </form>
+      </article>
+      <article className="control-card">
+        <h3>Slack</h3>
+        <p>Uses the exact workspace channel name visible in the signed-in Chrome profile.</p>
+        <button disabled={busy} onClick={() => void run(() => createBrowserJob({ adapter: "slack", action: "list_unreads", input: {} }))}>Check unreads</button>
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => createBrowserJob({ adapter: "slack", action: "read_channel", input: { channelName: channel } })); }}>
+          <input aria-label="Slack channel" placeholder="Exact channel name" value={channel} onChange={(event) => setChannel(event.target.value)} />
+          <button disabled={busy || !channel}>Read channel</button>
+        </form>
+        <form onSubmit={(event) => { event.preventDefault(); void run(async () => {
+          await createBrowserJob({ adapter: "slack", action: "send_message", input: { channelName: channel, text: message } });
+          setMessage("");
+        }); }}>
+          <textarea aria-label="Slack message" placeholder="Exact message to approve and send" value={message} onChange={(event) => setMessage(event.target.value)} />
+          <button className="primary" disabled={busy || !channel || !message}>Request message send</button>
+        </form>
+      </article>
+      <article className="job-card">
+        <h3>Recent browser jobs</h3>
+        <div className="job-list">{jobs.slice(0, 8).map((job) => <details key={job.id}>
+          <summary><i className={`run-dot ${job.status === "claimed" ? "running" : job.status}`} />{job.adapter.replace("google_", "")} · {job.action.replaceAll("_", " ")}<span>{job.status}</span></summary>
+          <pre>{job.error ?? resultText(job.result)}</pre>
+        </details>)}{jobs.length === 0 ? <p className="empty">No browser jobs yet</p> : null}</div>
+      </article>
+    </div>
+  </section>;
+}
+
+function TriggerWorkspace({
+  schedules,
+  abilities,
+  defaultCwd,
+  onChange,
+}: {
+  schedules: Schedule[];
+  abilities: AbilityManifest[];
+  defaultCwd: string;
+  onChange: () => void;
+}): React.JSX.Element {
+  const [name, setName] = useState("");
+  const [triggerKind, setTriggerKind] = useState<ScheduleTriggerKind>("at");
+  const [actionKind, setActionKind] = useState<ScheduleActionKind>("reminder");
+  const [triggerJson, setTriggerJson] = useState(() => JSON.stringify({ at: new Date(Date.now() + 3_600_000).toISOString() }, null, 2));
+  const [actionJson, setActionJson] = useState(() => JSON.stringify({ title: "Assistant reminder", body: "" }, null, 2));
+  const [busy, setBusy] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const triggerTemplate = (kind: ScheduleTriggerKind): Record<string, unknown> => kind === "at"
+    ? { at: new Date(Date.now() + 3_600_000).toISOString() }
+    : kind === "interval" ? { everyMs: 3_600_000 } : { app: "Calendar", cooldownMs: 60_000 };
+  const actionTemplate = (kind: ScheduleActionKind): Record<string, unknown> => kind === "reminder"
+    ? { title: "Assistant reminder", body: "" }
+    : kind === "agent" ? { title: "Scheduled agent", prompt: "Describe the task", cwd: defaultCwd }
+      : kind === "command" ? { title: "Scheduled command", executable: "git", args: ["status"], cwd: defaultCwd }
+        : { abilityId: abilities[0]?.id ?? "say-hello", input: {} };
+
+  const submit = async (event: FormEvent): Promise<void> => {
+    event.preventDefault(); setBusy("create"); setError(undefined);
+    try {
+      await createSchedule({ name, triggerKind, trigger: parseJsonObject(triggerJson, "Trigger"), actionKind, action: parseJsonObject(actionJson, "Action") });
+      setName(""); onChange();
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not create trigger"); }
+    finally { setBusy(undefined); }
+  };
+  const toggle = async (schedule: Schedule): Promise<void> => {
+    setBusy(schedule.id); setError(undefined);
+    try { await updateSchedule(schedule.id, { enabled: !schedule.enabled, expectedRevision: schedule.revision }); onChange(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not update trigger"); }
+    finally { setBusy(undefined); }
+  };
+
+  return <section className="automation-workspace">
+    <div className="section-heading"><div><p className="eyebrow">Automation</p><h2>Triggers</h2></div><span>{schedules.filter((item) => item.enabled).length} enabled</span></div>
+    {error ? <p className="error banner">{error}</p> : null}
+    <div className="automation-layout">
+      <form className="automation-form" onSubmit={(event) => void submit(event)}>
+        <input aria-label="Trigger name" placeholder="Trigger name" value={name} onChange={(event) => setName(event.target.value)} />
+        <div className="inline-fields">
+          <label>When<select value={triggerKind} onChange={(event) => { const value = event.target.value as ScheduleTriggerKind; setTriggerKind(value); setTriggerJson(JSON.stringify(triggerTemplate(value), null, 2)); }}><option value="at">At a time</option><option value="interval">On an interval</option><option value="system_notification">macOS notification</option></select></label>
+          <label>Do<select value={actionKind} onChange={(event) => { const value = event.target.value as ScheduleActionKind; setActionKind(value); setActionJson(JSON.stringify(actionTemplate(value), null, 2)); }}><option value="reminder">Send reminder</option><option value="agent">Start agent</option><option value="command">Propose command</option><option value="ability">Invoke ability</option></select></label>
+        </div>
+        <label>Trigger configuration<textarea className="json-input" value={triggerJson} onChange={(event) => setTriggerJson(event.target.value)} /></label>
+        <label>Action configuration<textarea className="json-input" value={actionJson} onChange={(event) => setActionJson(event.target.value)} /></label>
+        <button className="primary" disabled={busy === "create" || !name}>Create trigger</button>
+      </form>
+      <div className="schedule-list">{schedules.map((schedule) => <article key={schedule.id}>
+        <div><i className={`schedule-state ${schedule.enabled ? "enabled" : ""}`} /><strong>{schedule.name}</strong><span>revision {schedule.revision}</span></div>
+        <p>{schedule.triggerKind.replaceAll("_", " ")} → {schedule.actionKind}</p>
+        <small>{schedule.nextRunAt ? `Next ${new Date(schedule.nextRunAt).toLocaleString()}` : schedule.lastRunAt ? `Last ${new Date(schedule.lastRunAt).toLocaleString()}` : "Event-driven"}</small>
+        <details><summary>Configuration</summary><pre>{JSON.stringify({ trigger: schedule.trigger, action: schedule.action }, null, 2)}</pre></details>
+        <button disabled={busy === schedule.id} onClick={() => void toggle(schedule)}>{schedule.enabled ? "Disable" : "Enable"}</button>
+      </article>)}{schedules.length === 0 ? <p className="empty">No triggers configured</p> : null}</div>
+    </div>
+  </section>;
+}
+
+function CapabilityWorkspace({
+  abilities,
+  defaultCwd,
+  onChange,
+}: {
+  abilities: AbilityManifest[];
+  defaultCwd: string;
+  onChange: () => void;
+}): React.JSX.Element {
+  const [commandTitle, setCommandTitle] = useState("");
+  const [executable, setExecutable] = useState("");
+  const [commandArgs, setCommandArgs] = useState("");
+  const [cwd, setCwd] = useState(defaultCwd);
+  const [manifestJson, setManifestJson] = useState("");
+  const [abilityInputs, setAbilityInputs] = useState<Record<string, string>>({});
+  const [clipboard, setClipboard] = useState<{ mimeType: string; dataUrl: string }>();
+  const [busy, setBusy] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => { if (!cwd && defaultCwd) setCwd(defaultCwd); }, [cwd, defaultCwd]);
+  const perform = async (key: string, action: () => Promise<void>): Promise<void> => {
+    setBusy(key); setError(undefined);
+    try { await action(); onChange(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Capability request failed"); }
+    finally { setBusy(undefined); }
+  };
+
+  return <section className="capability-workspace">
+    <div className="section-heading"><div><p className="eyebrow">Local capabilities</p><h2>Commands, abilities &amp; clipboard</h2></div><span>{abilities.length} abilities</span></div>
+    {error ? <p className="error banner">{error}</p> : null}
+    <div className="integration-grid">
+      <article className="control-card">
+        <h3>Propose local command</h3><p>Arguments are one per line and are passed without a shell. Nothing runs until approved.</p>
+        <form onSubmit={(event) => { event.preventDefault(); void perform("command", async () => {
+          await proposeCommand({ title: commandTitle, executable, args: commandArgs.split("\n").filter((value) => value.length > 0), cwd });
+          setCommandTitle(""); setExecutable(""); setCommandArgs("");
+        }); }}>
+          <input placeholder="Purpose" value={commandTitle} onChange={(event) => setCommandTitle(event.target.value)} />
+          <input placeholder="Executable, e.g. git" value={executable} onChange={(event) => setExecutable(event.target.value)} />
+          <textarea placeholder={'Arguments, one per line\nstatus\n--short'} value={commandArgs} onChange={(event) => setCommandArgs(event.target.value)} />
+          <input aria-label="Command working directory" value={cwd} onChange={(event) => setCwd(event.target.value)} />
+          <button className="primary" disabled={busy === "command" || !commandTitle || !executable || !cwd}>Request approval</button>
+        </form>
+      </article>
+      <article className="control-card">
+        <h3>Abilities</h3><p>Invoke installed manifests or install a version-1 manifest. Invocations use normal command approval.</p>
+        <div className="ability-list">{abilities.map((ability) => <form key={ability.id} onSubmit={(event) => { event.preventDefault(); void perform(ability.id, () => invokeAbility(ability.id, parseJsonObject(abilityInputs[ability.id] ?? "{}", "Ability input"))); }}>
+          <label><strong>{ability.name}</strong><span>{ability.description}</span></label>
+          <textarea className="json-input compact" aria-label={`${ability.name} input`} value={abilityInputs[ability.id] ?? "{}"} onChange={(event) => setAbilityInputs({ ...abilityInputs, [ability.id]: event.target.value })} />
+          <button disabled={busy === ability.id}>Invoke</button>
+        </form>)}</div>
+        <details><summary>Install manifest JSON</summary><form onSubmit={(event) => { event.preventDefault(); void perform("install", async () => { await installAbility(parseJsonObject(manifestJson, "Manifest")); setManifestJson(""); }); }}><textarea className="json-input" placeholder='{"manifestVersion":1,...}' value={manifestJson} onChange={(event) => setManifestJson(event.target.value)} /><button disabled={busy === "install" || !manifestJson}>Install or update</button></form></details>
+      </article>
+      <article className="control-card clipboard-card">
+        <h3>Clipboard image</h3><p>Read the current PNG/TIFF image from the local desktop without uploading it.</p>
+        <button disabled={busy === "clipboard"} onClick={() => void perform("clipboard", async () => setClipboard(await readClipboardImage()))}>Read clipboard</button>
+        {clipboard ? <figure><img src={clipboard.dataUrl} alt="Current clipboard" /><figcaption>{clipboard.mimeType}</figcaption></figure> : <div className="clipboard-empty">No clipboard image loaded</div>}
+      </article>
+    </div>
+  </section>;
+}
+
 function MemoryWorkspace({ memories, onChange }: { memories: Memory[]; onChange: () => void }): React.JSX.Element {
   type ListItem = Pick<Memory, "id" | "title" | "kind" | "revision" | "summary"> & { snippet: string };
   const initialItems = (items: Memory[]): ListItem[] => items.map((memory) => ({ id: memory.id, title: memory.title, kind: memory.kind, revision: memory.revision, summary: memory.summary, snippet: memory.summary ?? memory.body.slice(0, 100) }));
@@ -414,6 +675,8 @@ export default function App(): React.JSX.Element {
   const [notifications, setNotifications] = useState<AssistantNotification[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
+  const [abilities, setAbilities] = useState<AbilityManifest[]>([]);
+  const [browserJobs, setBrowserJobs] = useState<BrowserJob[]>([]);
   const [defaultCwd, setDefaultCwd] = useState("");
   const [browserStatus, setBrowserStatus] = useState<BrowserAutomationStatus>({
     backend: "claude_in_chrome", enabled: true, state: "stopped", activeJobId: null,
@@ -424,8 +687,8 @@ export default function App(): React.JSX.Element {
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const [nextTasks, nextSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, config, nextBrowserStatus] = await Promise.all([
-        listTasks(), listSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), getConfig(), getBrowserStatus(),
+      const [nextTasks, nextSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, config, nextBrowserStatus] = await Promise.all([
+        listTasks(), listSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), getConfig(), getBrowserStatus(),
       ]);
       setTasks(nextTasks);
       setSessions(nextSessions);
@@ -434,6 +697,8 @@ export default function App(): React.JSX.Element {
       setNotifications(nextNotifications);
       setSchedules(nextSchedules);
       setMemories(nextMemories);
+      setAbilities(nextAbilities);
+      setBrowserJobs(nextBrowserJobs);
       setDefaultCwd(config.allowedRoots[0] ?? "");
       setBrowserStatus(nextBrowserStatus);
       setAuthenticated(true);
@@ -500,6 +765,12 @@ export default function App(): React.JSX.Element {
       <NotificationInbox notifications={notifications} onChange={() => void refresh()} />
 
       <AssistantTools schedules={schedules} memories={memories} defaultCwd={defaultCwd} onChange={() => void refresh()} />
+
+      <BrowserWorkspace status={browserStatus} jobs={browserJobs} onChange={() => void refresh()} />
+
+      <TriggerWorkspace schedules={schedules} abilities={abilities} defaultCwd={defaultCwd} onChange={() => void refresh()} />
+
+      <CapabilityWorkspace abilities={abilities} defaultCwd={defaultCwd} onChange={() => void refresh()} />
 
       <MemoryWorkspace memories={memories} onChange={() => void refresh()} />
 

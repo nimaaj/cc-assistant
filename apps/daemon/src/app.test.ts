@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -35,7 +35,25 @@ function config(): DaemonConfig {
 
 describe("daemon API", () => {
   it("requires authentication and supports the task lifecycle", async () => {
-    const app = await buildApp({ config: config(), browserAgentQuery: fakeBrowserQuery });
+    const webRoot = mkdtempSync(join(tmpdir(), "cc-assistant-web-"));
+    mkdirSync(join(webRoot, "assets"));
+    writeFileSync(join(webRoot, "index.html"), "<!doctype html><title>CC Assistant fixture</title>");
+    writeFileSync(join(webRoot, "assets", "app.js"), "globalThis.fixture = true;");
+    const app = await buildApp({ config: config(), browserAgentQuery: fakeBrowserQuery, webRoot });
+
+    const dashboard = await app.inject({ method: "GET", url: "/" });
+    expect(dashboard.statusCode).toBe(200);
+    expect(dashboard.headers["content-type"]).toContain("text/html");
+    expect(dashboard.headers["cache-control"]).toBe("no-cache");
+    expect(dashboard.body).toContain("CC Assistant fixture");
+
+    const asset = await app.inject({ method: "GET", url: "/assets/app.js" });
+    expect(asset.statusCode).toBe(200);
+    expect(asset.headers["content-type"]).toContain("text/javascript");
+    expect(asset.headers["cache-control"]).toContain("immutable");
+
+    const missingAsset = await app.inject({ method: "GET", url: "/assets/missing.js" });
+    expect(missingAsset.statusCode).toBe(404);
 
     const unauthorized = await app.inject({ method: "GET", url: "/api/tasks" });
     expect(unauthorized.statusCode).toBe(401);
@@ -266,5 +284,6 @@ describe("daemon API", () => {
     rmSync(databasePath, { force: true });
     rmSync(`${databasePath}-shm`, { force: true });
     rmSync(`${databasePath}-wal`, { force: true });
+    rmSync(webRoot, { recursive: true, force: true });
   });
 });

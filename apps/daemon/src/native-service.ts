@@ -48,12 +48,13 @@ export class NativeService implements NativeAdapter {
   async readClipboardImage(): Promise<{ mimeType: string; base64: string }> {
     if (this.#platform === "darwin") {
       const script = `ObjC.import('AppKit');
-function run(){var p=$.NSPasteboard.generalPasteboard;var types=['public.png','public.tiff'];
-for(var i=0;i<types.length;i++){var d=p.dataForType(types[i]);if(d){return types[i]+'\\n'+ObjC.unwrap(d.base64EncodedStringWithOptions(0));}}
+function run(){var p=$.NSPasteboard.generalPasteboard;var d=p.dataForType('public.png');
+if(!d){var t=p.dataForType('public.tiff');if(t){var r=$.NSBitmapImageRep.imageRepWithData(t);if(r){d=r.representationUsingTypeProperties($.NSBitmapImageFileTypePNG,$({}));}}}
+if(d){return 'public.png\\n'+ObjC.unwrap(d.base64EncodedStringWithOptions(0));}
 throw new Error('Clipboard does not contain a PNG or TIFF image');}`;
       const { stdout } = await this.#run("osascript", ["-l", "JavaScript", "-e", script]);
-      const [type, ...data] = stdout.toString("utf8").trim().split("\n");
-      return { mimeType: type === "public.tiff" ? "image/tiff" : "image/png", base64: data.join("") };
+      const [, ...data] = stdout.toString("utf8").trim().split("\n");
+      return { mimeType: "image/png", base64: data.join("") };
     }
     if (this.#platform === "linux") {
       try {

@@ -165,6 +165,49 @@ describe("Claude-in-Chrome browser automation", () => {
     executionRepository.close();
   });
 
+  it("rejects a nominally successful browser write without the required verification flag", async () => {
+    const databasePath = join(tmpdir(), `cc-assistant-browser-unverified-write-${randomUUID()}.sqlite`);
+    paths.push(databasePath);
+    new TaskRepository(databasePath).close();
+    const assistantRepository = new AssistantRepository(databasePath);
+    const executionRepository = new ExecutionRepository(databasePath);
+    const fakeQuery: BrowserAgentQuery = () => {
+      const iterator = (async function* (): AsyncGenerator<SDKMessage> {
+        yield {
+          type: "result", subtype: "success", is_error: false, session_id: "unverified-write-session",
+          result: "done", structured_output: {
+            ok: true, summary: "I think the message was sent", data: {},
+          }, total_cost_usd: 0.01, num_turns: 1,
+        } as SDKMessage;
+      })();
+      return Object.assign(iterator, { close() {} });
+    };
+    const config: DaemonConfig = {
+      host: "127.0.0.1", port: 4317, dataDir: tmpdir(), databasePath,
+      accessToken: "test-token-with-at-least-thirty-two-characters", accessTokenPath: "unused",
+      allowedRoots: [tmpdir()],
+    };
+    const run = executionRepository.createRun({
+      kind: "browser", status: "queued", title: "Unverified Slack send", cwd: tmpdir(),
+      metadata: { adapter: "slack", action: "send_message" },
+    });
+    const job = assistantRepository.createBrowserJob("slack", "send_message", {
+      channelName: "test-channel", text: "Exact text",
+    }, run.id);
+    const service = new BrowserAutomationService(assistantRepository, executionRepository, config, fakeQuery);
+    service.start();
+
+    await until(() => assistantRepository.getBrowserJob(job.id)?.status === "failed", "Unverified write did not fail");
+    expect(assistantRepository.getBrowserJob(job.id)?.error).toBe("Slack worker did not verify message delivery with data.sent=true");
+    expect(executionRepository.getRun(run.id)).toMatchObject({
+      status: "failed", error: "Slack worker did not verify message delivery with data.sent=true",
+    });
+
+    await service.shutdown();
+    assistantRepository.close();
+    executionRepository.close();
+  });
+
   it("reconstructs an approved browser job after a restart window", async () => {
     const databasePath = join(tmpdir(), `cc-assistant-browser-recovery-${randomUUID()}.sqlite`);
     paths.push(databasePath);

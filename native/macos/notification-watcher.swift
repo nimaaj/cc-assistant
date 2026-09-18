@@ -7,6 +7,23 @@ struct Options {
     var tokenFile = ".data/access-token"
 }
 
+final class DeliveryState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var delivered = false
+
+    func set(_ value: Bool) {
+        lock.lock()
+        delivered = value
+        lock.unlock()
+    }
+
+    func get() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return delivered
+    }
+}
+
 func options() -> Options {
     var result = Options()
     var index = 1
@@ -41,14 +58,35 @@ func strings(in element: AXUIElement, depth: Int = 0) -> [String] {
     return result
 }
 
-func post(daemon: String, token: String, app: String, title: String, body: String) {
-    guard let url = URL(string: daemon + "/api/triggers/system-notification") else { return }
+func post(daemon: String, token: String, app: String, title: String, body: String) -> Bool {
+    guard let url = URL(string: daemon + "/api/triggers/system-notification") else { return false }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
+    request.timeoutInterval = 2
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try? JSONSerialization.data(withJSONObject: ["app": app, "title": title, "body": body])
-    URLSession.shared.dataTask(with: request).resume()
+    let completed = DispatchSemaphore(value: 0)
+    let state = DeliveryState()
+    let task = URLSession.shared.dataTask(with: request) { _, response, error in
+        if let http = response as? HTTPURLResponse {
+            let delivered = error == nil && (200..<300).contains(http.statusCode)
+            state.set(delivered)
+            if !delivered {
+                FileHandle.standardError.write(Data("Notification delivery failed with HTTP \(http.statusCode)\n".utf8))
+            }
+        } else if let error {
+            FileHandle.standardError.write(Data("Notification delivery failed: \(error.localizedDescription)\n".utf8))
+        }
+        completed.signal()
+    }
+    task.resume()
+    if completed.wait(timeout: .now() + 3) == .timedOut {
+        task.cancel()
+        FileHandle.standardError.write(Data("Notification delivery timed out; it will be retried while visible.\n".utf8))
+        return false
+    }
+    return state.get()
 }
 
 let configuration = options()
@@ -72,6 +110,7 @@ while true {
         guard let app = apps.first else { return }
         let root = AXUIElementCreateApplication(app.processIdentifier)
         guard let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] else { return }
+        var delivered = seen
         var current = Set<String>()
         for window in windows {
             let values = Array(NSOrderedSet(array: strings(in: window))) as? [String] ?? []
@@ -85,10 +124,12 @@ while true {
             let fingerprint = sourceApp + "\n" + title + "\n" + body
             current.insert(fingerprint)
             if !seen.contains(fingerprint) {
-                post(daemon: configuration.daemon, token: token, app: sourceApp, title: title, body: body)
+                if post(daemon: configuration.daemon, token: token, app: sourceApp, title: title, body: body) {
+                    delivered.insert(fingerprint)
+                }
             }
         }
-        seen = current
+        seen = delivered.intersection(current)
     }
     Thread.sleep(forTimeInterval: 1.0)
 }

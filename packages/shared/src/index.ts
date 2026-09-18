@@ -214,8 +214,10 @@ export type ResolveApprovalInput = z.infer<typeof ResolveApprovalSchema>;
 
 export const scheduleTriggerKinds = ["at", "interval", "system_notification"] as const;
 export const ScheduleTriggerKindSchema = z.enum(scheduleTriggerKinds);
+export type ScheduleTriggerKind = z.infer<typeof ScheduleTriggerKindSchema>;
 export const scheduleActionKinds = ["reminder", "agent", "command", "ability"] as const;
 export const ScheduleActionKindSchema = z.enum(scheduleActionKinds);
+export type ScheduleActionKind = z.infer<typeof ScheduleActionKindSchema>;
 
 const AtTriggerSchema = z.object({ at: z.iso.datetime() }).strict();
 const IntervalTriggerSchema = z.object({

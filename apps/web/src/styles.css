@@ -16,7 +16,7 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; background:
   radial-gradient(circle at 75% -15%, rgba(81, 128, 76, .24), transparent 32rem),
   #0d120f; }
-button, input, textarea { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .85em; color: var(--accent); }
 
@@ -31,6 +31,8 @@ code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-si
 label { font-size: .76rem; color: #b2bdb6; font-weight: 600; }
 input { width: 100%; color: #edf2ee; background: #0f1511; border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; outline: none; transition: border-color .15s, box-shadow .15s; }
 input:focus { border-color: #79a74b; box-shadow: 0 0 0 3px rgba(185, 244, 109, .08); }
+select { width: 100%; color: #edf2ee; background: #0f1511; border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; outline: none; }
+select:focus { border-color: #79a74b; box-shadow: 0 0 0 3px rgba(185, 244, 109, .08); }
 textarea { width: 100%; min-height: 76px; resize: vertical; color: #edf2ee; background: #0f1511; border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; outline: none; }
 textarea:focus { border-color: #79a74b; box-shadow: 0 0 0 3px rgba(185, 244, 109, .08); }
 button { color: #dbe3dd; background: transparent; border: 1px solid #39473f; border-radius: 8px; padding: 7px 10px; font-size: .78rem; font-weight: 600; }
@@ -69,6 +71,49 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .tools-grid form .primary { justify-self: start; }
 .memory-peek { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
 .memory-peek span { padding: 3px 6px; color: var(--muted); background: #222c26; border-radius: 5px; font-size: .62rem; }
+
+.integration-workspace, .automation-workspace, .capability-workspace { margin-top: 28px; }
+.integration-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.control-card, .job-card { min-width: 0; padding: 16px; background: rgba(21, 28, 24, .72); border: 1px solid var(--line); border-radius: 12px; }
+.control-card h3, .job-card h3 { margin: 0; font-size: .88rem; }
+.control-card > p { min-height: 34px; margin: 7px 0 14px; color: var(--muted); font-size: .7rem; line-height: 1.5; }
+.control-card form { display: grid; gap: 8px; margin-top: 10px; }
+.control-card form + form { padding-top: 10px; border-top: 1px solid var(--line); }
+.inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.job-list { display: grid; gap: 7px; margin-top: 14px; max-height: 390px; overflow-y: auto; }
+.job-list details { padding: 9px 10px; background: #101612; border: 1px solid var(--line); border-radius: 8px; }
+.job-list summary { display: flex; align-items: center; gap: 7px; cursor: pointer; color: #c9d3cc; font-size: .7rem; text-transform: capitalize; }
+.job-list summary span { margin-left: auto; color: var(--muted); font-size: .58rem; text-transform: uppercase; }
+.job-list pre, .schedule-list pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #bcc7bf; font: .66rem/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+
+.automation-layout { display: grid; grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr); gap: 10px; }
+.automation-form { display: grid; align-content: start; gap: 9px; padding: 16px; background: rgba(21, 28, 24, .72); border: 1px solid var(--line); border-radius: 12px; }
+.automation-form label { display: grid; gap: 6px; }
+.automation-form .primary { justify-self: start; }
+.json-input { min-height: 105px; font: .7rem/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.json-input.compact { min-height: 58px; }
+.schedule-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 8px; }
+.schedule-list > article { padding: 13px; background: rgba(21, 28, 24, .72); border: 1px solid var(--line); border-radius: 11px; }
+.schedule-list > article > div { display: flex; align-items: center; gap: 7px; }
+.schedule-list strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: .76rem; }
+.schedule-list span { margin-left: auto; color: var(--muted); font-size: .58rem; }
+.schedule-list p { margin: 11px 0 5px; color: #bdc9c0; font-size: .68rem; text-transform: capitalize; }
+.schedule-list small { display: block; color: var(--muted); font-size: .61rem; }
+.schedule-list details { margin: 10px 0; }
+.schedule-list summary { cursor: pointer; color: var(--muted); font-size: .64rem; }
+.schedule-state { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #68766d; }
+.schedule-state.enabled { background: var(--accent); box-shadow: 0 0 0 4px rgba(185,244,109,.08); }
+
+.ability-list { display: grid; gap: 8px; }
+.ability-list form { padding: 9px; border: 1px solid var(--line); border-radius: 8px; }
+.ability-list label { display: grid; gap: 3px; }
+.ability-list label span { color: var(--muted); font-size: .64rem; line-height: 1.4; }
+.control-card > details { margin-top: 12px; }
+.control-card > details > summary { cursor: pointer; color: var(--muted); font-size: .68rem; }
+.clipboard-card figure { margin: 12px 0 0; }
+.clipboard-card img { display: block; width: 100%; max-height: 260px; object-fit: contain; background: #0b0f0c; border: 1px solid var(--line); border-radius: 8px; }
+.clipboard-card figcaption { margin-top: 5px; color: var(--muted); font-size: .62rem; }
+.clipboard-empty { display: grid; min-height: 140px; margin-top: 12px; place-items: center; color: #536158; border: 1px dashed #28342d; border-radius: 8px; font-size: .7rem; }
 
 .memory-workspace { margin-top: 28px; }
 .memory-search { display: grid; grid-template-columns: minmax(260px, 1fr) 180px 140px auto; gap: 8px; margin-bottom: 10px; }
@@ -171,6 +216,8 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
   header { align-items: flex-start; }
   .capture { grid-template-columns: 1fr; }
   .tools-grid { grid-template-columns: 1fr; }
+  .integration-grid, .automation-layout, .schedule-list { grid-template-columns: 1fr; }
+  .inline-fields { grid-template-columns: 1fr; }
   .memory-search { grid-template-columns: 1fr; }
   .memory-layout { grid-template-columns: 1fr; }
   .memory-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 250px; }

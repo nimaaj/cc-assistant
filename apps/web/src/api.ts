@@ -1,7 +1,9 @@
 import {
   ApprovalListSchema,
+  AbilityManifestSchema,
   AssistantNotificationListSchema,
   BrowserAutomationStatusSchema,
+  BrowserJobListSchema,
   ClaudeSessionListSchema,
   MemoryListSchema,
   MemoryRecordSchema,
@@ -14,13 +16,18 @@ import {
   type CreateTaskInput,
   type ClaudeSession,
   type Approval,
+  type AbilityManifest,
   type AssistantNotification,
   type BrowserAutomationStatus,
+  type BrowserJob,
+  type BrowserJobRequest,
+  type CreateScheduleInput,
   type Memory,
   type MemorySearchHit,
   type Run,
   type Schedule,
   type Task,
+  type UpdateScheduleInput,
   type UpdateTaskInput,
 } from "@cc-assistant/shared";
 
@@ -106,6 +113,22 @@ export async function listSchedules(): Promise<Schedule[]> {
   return ScheduleListSchema.parse(await request("/api/schedules")).schedules;
 }
 
+export async function createSchedule(input: CreateScheduleInput): Promise<Schedule> {
+  const result = await request("/api/schedules", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }) as { schedule: unknown };
+  return ScheduleListSchema.shape.schedules.element.parse(result.schedule);
+}
+
+export async function updateSchedule(id: string, input: UpdateScheduleInput): Promise<Schedule> {
+  const result = await request(`/api/schedules/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  }) as { schedule: unknown };
+  return ScheduleListSchema.shape.schedules.element.parse(result.schedule);
+}
+
 export async function createReminder(input: { title: string; body: string; at: string }): Promise<void> {
   await request("/api/schedules", { method: "POST", body: JSON.stringify({
     name: input.title, triggerKind: "at", trigger: { at: input.at },
@@ -146,6 +169,54 @@ export async function archiveMemory(id: string, expectedRevision: number): Promi
 
 export async function startAgent(input: { title: string; prompt: string; cwd: string }): Promise<void> {
   await request("/api/runs/agent", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function proposeCommand(input: {
+  title: string;
+  executable: string;
+  args: string[];
+  cwd: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  await request("/api/runs/command", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function listAbilities(): Promise<AbilityManifest[]> {
+  const result = await request("/api/abilities") as { abilities: unknown[] };
+  return result.abilities.map((ability) => AbilityManifestSchema.parse(ability));
+}
+
+export async function installAbility(manifest: unknown): Promise<AbilityManifest> {
+  const result = await request("/api/abilities", {
+    method: "POST",
+    body: JSON.stringify(manifest),
+  }) as { ability: unknown };
+  return AbilityManifestSchema.parse(result.ability);
+}
+
+export async function invokeAbility(id: string, input: Record<string, unknown>): Promise<void> {
+  await request(`/api/abilities/${encodeURIComponent(id)}/invoke`, {
+    method: "POST",
+    body: JSON.stringify({ input }),
+  });
+}
+
+export async function listBrowserJobs(): Promise<BrowserJob[]> {
+  return BrowserJobListSchema.parse(await request("/api/browser/jobs")).jobs;
+}
+
+export async function createBrowserJob(input: BrowserJobRequest): Promise<void> {
+  await request("/api/browser/jobs", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function readClipboardImage(): Promise<{ mimeType: string; dataUrl: string }> {
+  const result = await request("/api/native/clipboard/image") as {
+    image?: { mimeType?: unknown; dataUrl?: unknown };
+  };
+  if (typeof result.image?.mimeType !== "string" || typeof result.image.dataUrl !== "string") {
+    throw new Error("The daemon returned an invalid clipboard image");
+  }
+  return { mimeType: result.image.mimeType, dataUrl: result.image.dataUrl };
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task> {

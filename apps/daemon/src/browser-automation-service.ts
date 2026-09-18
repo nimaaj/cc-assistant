@@ -85,6 +85,15 @@ function promptFor(job: BrowserJob): string {
   ].join("\n\n");
 }
 
+function assertVerifiedWrite(job: BrowserJob, output: z.infer<typeof BrowserAgentOutputSchema>): void {
+  if (job.adapter === "google_calendar" && job.action === "create_event" && output.data.created !== true) {
+    throw new Error("Calendar worker did not verify event creation with data.created=true");
+  }
+  if (job.adapter === "slack" && job.action === "send_message" && output.data.sent !== true) {
+    throw new Error("Slack worker did not verify message delivery with data.sent=true");
+  }
+}
+
 export class BrowserAutomationService {
   readonly #assistantRepository: AssistantRepository;
   readonly #executionRepository: ExecutionRepository;
@@ -285,6 +294,7 @@ export class BrowserAutomationService {
 
       if (!output) throw new Error("Claude-in-Chrome worker ended without a structured result");
       if (!output.ok) throw new Error(output.summary);
+      assertVerifiedWrite(job, output);
       const completed = this.#assistantRepository.completeBrowserJob(job.id, output);
       this.#lastCompletedAt = completed.completedAt;
       if (job.runId) {

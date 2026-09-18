@@ -219,4 +219,30 @@ describe("execution service", () => {
     service.shutdown();
     repository.close();
   });
+
+  it("fails a managed run when the SDK stream ends without a terminal result", async () => {
+    const databasePath = join(tmpdir(), `cc-assistant-agent-no-result-${randomUUID()}.sqlite`);
+    paths.push(databasePath);
+    new TaskRepository(databasePath).close();
+    const repository = new ExecutionRepository(databasePath);
+    const fakeQuery: AgentQuery = () => {
+      const iterator = (async function* (): AsyncGenerator<SDKMessage> {
+        yield { type: "system", subtype: "init", session_id: "no-result-session" } as SDKMessage;
+      })();
+      return Object.assign(iterator, { close() {} });
+    };
+    const config: DaemonConfig = {
+      host: "127.0.0.1", port: 4317, dataDir: tmpdir(), databasePath,
+      accessToken: "test-token-with-at-least-thirty-two-characters", accessTokenPath: "unused",
+      allowedRoots: [tmpdir()],
+    };
+    const service = new ExecutionService(repository, config, fakeQuery);
+    const run = service.startAgent({ title: "No result", prompt: "End unexpectedly", cwd: tmpdir() });
+
+    await until(() => repository.getRun(run.id)?.status === "failed", "Run without result did not fail");
+    expect(repository.getRun(run.id)).toMatchObject({
+      status: "failed", error: "Claude run ended without a terminal result", sessionId: "no-result-session",
+    });
+    repository.close();
+  });
 });
