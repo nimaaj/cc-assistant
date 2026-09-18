@@ -1,0 +1,53 @@
+# Architecture
+
+## Process boundaries
+
+The system is split into five process boundaries:
+
+1. The daemon owns durable state, scheduling, approvals, managed execution, and integration lifecycles.
+2. The MCP bridge is spawned by Claude Code over stdio and forwards typed requests to the daemon.
+3. The browser dashboard reads and changes the same state through the daemon API.
+4. The developer CLI provides human-readable and JSON state control through that API.
+5. A bounded Agent SDK worker delegates browser-only jobs to Claude Code's official Claude-in-Chrome integration; an optional macOS watcher handles notification triggers.
+
+The split allows reminders, session monitoring, and managed agents to survive the end of an individual Claude Code session.
+
+SQLite is not a public mutation interface. Every writer uses the daemon so validation, optimistic revisions, audit events, and live subscriptions remain consistent. Developers can use `cca api` when they need low-level access to an authenticated endpoint.
+
+## Trust boundaries
+
+- MCP clients and the dashboard authenticate to the daemon.
+- Ability commands use manifest validation, shell-free argument arrays, allowed working-directory roots, stripped secret and execution-control environment variables, and one-time approvals whose exact payload is inspectable in the dashboard.
+- Browser content is untrusted even when it comes from a signed-in work account.
+- A trigger may propose a sensitive operation but cannot approve it.
+- Account tokens remain in the macOS Keychain or the owning browser profile.
+
+## Google Calendar constraint
+
+The work calendar does not provide API access. Calendar integration will therefore use visible browser interaction.
+
+The implementation executes narrow jobs through the Agent SDK with Claude-in-Chrome enabled against already signed-in tabs. It does not install or operate a cc-assistant Chrome extension. Read-only jobs can queue directly. Calendar creation and Slack sending are represented as browser runs and require persisted approval before dispatch. A closed tab, changed UI, login screen, ambiguous target, or unclear confirmation fails the job; it is never interpreted as an empty calendar or successful write. Dashboard state `ready` means the worker is configured and idle; a real extension/session problem is detected fail-closed when a job runs.
+
+Each worker receives only the `mcp__claude-in-chrome__*` tool family, a job-specific prompt, structured output schema, low default effort, a turn limit, and a cost ceiling. Project MCP settings are not loaded into the browser worker, preventing recursive cc-assistant calls. Browser content is explicitly untrusted. Playwright remains a possible adapter for isolated test profiles, but the production path uses the user's existing official Claude-in-Chrome session.
+
+Calendar observations feed the assistant's own durable reminder scheduler. The browser session is not the reminder engine. Adapter/action pairs have shared daemon-side schemas, Calendar writes require an explicit valid time range, and Slack channel selection is exact and fail-closed.
+
+## Persisted entities
+
+The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, and append-only `events`.
+
+All mutable entities use revisions or internal queue claims where concurrent actors may update them.
+
+## State transitions
+
+Commands and browser writes start in `waiting_approval`. Approval resolution is durable and auditable; command execution uses `spawn(executable, args, { shell: false })`. Managed Claude runs use the Agent SDK permission callback, which parks a tool request until its approval is resolved. Agent runs that are interrupted by a daemon restart are failed and their unserviceable approvals expire. Browser jobs are claimed by the daemon's single-worker queue; interrupted claims are requeued on startup.
+
+Schedules store their next fire time in SQLite. One-time triggers disable after firing; interval triggers compute the next timestamp; notification triggers require at least one filter, stay enabled, and enforce a cooldown. Complete trigger/action payloads are validated on create and edit, and edits use optimistic revisions. Reminder delivery always enters the web inbox even if native desktop delivery fails.
+
+## Memory data ownership
+
+`MemoryRepository` is the sole writer for wiki memory state. A create/update transaction changes the canonical record, FTS row, extracted `[[wiki links]]`, and immutable revision snapshot together; the event is appended after the transaction commits. Archived pages leave history and graph edges intact but leave the default list and FTS index.
+
+Lexical search is isolated behind `MemorySearchProvider`. The current provider safely tokenizes arbitrary user text, uses FTS5/BM25, then applies deterministic exact-title/alias and filter boosts. Recall consumes that contract and enforces record and character limits. A future semantic/vector provider can implement the same contract without changing HTTP, MCP, or CLI shapes.
+
+The daemon uses SQLite WAL mode. Offline backups may copy `assistant.sqlite`; online backups must use SQLite’s backup API/`.backup` so the WAL is included consistently.

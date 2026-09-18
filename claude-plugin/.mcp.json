@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cc-assistant": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server/launcher.mjs"],
+      "env": {
+        "CC_ASSISTANT_DAEMON_URL": "http://127.0.0.1:4317"
+      }
+    }
+  }
+}

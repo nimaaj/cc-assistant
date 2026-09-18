@@ -1,0 +1,8 @@
+{
+  "name": "cc-assistant",
+  "description": "Local-first tasks, managed runs, approvals, reminders, memory, Calendar, Slack, and native assistant tools for Claude Code.",
+  "version": "0.1.0",
+  "author": {
+    "name": "cc-assistant contributors"
+  }
+}

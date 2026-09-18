@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.data/
+.vite/
+coverage/
+*.log
+.DS_Store
+.directory
+.env
+.env.*
+!.env.example
+.remember/
+.agents/
+.codex/
