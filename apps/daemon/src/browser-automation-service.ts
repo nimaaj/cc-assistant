@@ -37,7 +37,7 @@ const defaultBrowserConfig = {
   model: "sonnet",
   effort: "low" as const,
   maxTurns: 12,
-  maxBudgetUsd: 0.5,
+  maxBudgetUsd: 1,
 };
 
 function errorMessage(error: unknown): string {

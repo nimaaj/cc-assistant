@@ -97,7 +97,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DaemonConfig {
         ? env.CC_ASSISTANT_BROWSER_EFFORT
         : "low",
       maxTurns: Math.trunc(boundedNumber("CC_ASSISTANT_BROWSER_MAX_TURNS", env.CC_ASSISTANT_BROWSER_MAX_TURNS, 12, 1, 50)),
-      maxBudgetUsd: boundedNumber("CC_ASSISTANT_BROWSER_MAX_BUDGET_USD", env.CC_ASSISTANT_BROWSER_MAX_BUDGET_USD, 0.5, 0.01, 10),
+      maxBudgetUsd: boundedNumber("CC_ASSISTANT_BROWSER_MAX_BUDGET_USD", env.CC_ASSISTANT_BROWSER_MAX_BUDGET_USD, 1, 0.01, 10),
     },
   };
 }

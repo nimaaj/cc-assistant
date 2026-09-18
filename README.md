@@ -133,14 +133,14 @@ Defaults are intentionally bounded and can be changed in the daemon environment:
 CC_ASSISTANT_BROWSER_MODEL=sonnet
 CC_ASSISTANT_BROWSER_EFFORT=low
 CC_ASSISTANT_BROWSER_MAX_TURNS=12
-CC_ASSISTANT_BROWSER_MAX_BUDGET_USD=0.50
+CC_ASSISTANT_BROWSER_MAX_BUDGET_USD=1.00
 ```
 
 Browser workers prefer the signed-in Claude Code subscription by default, so an unrelated inherited `ANTHROPIC_API_KEY` does not override the account used by the official Chrome integration. Set `CC_ASSISTANT_BROWSER_USE_CLAUDE_LOGIN=false` if API-key billing is intentional. Set `CC_ASSISTANT_BROWSER_ENABLED=false` to disable browser execution. Playwright is a possible future adapter for isolated test profiles, but it is not required and the app never asks for a second extension.
 
 Calendar creation requires explicit ISO `start` and `end` timestamps, with the end after the start. Slack channel selection is exact rather than substring-based so a message cannot silently go to a similarly named channel. The daemon validates each adapter/action payload even when it arrives through `cca api`.
 
-For controlled-account release testing, `pnpm smoke:browser:e2e -- --reads` exercises both read paths. Live writes require all exact Calendar and Slack inputs plus the literal `--confirm LIVE_WRITES_APPROVED`; see `pnpm smoke:browser:e2e -- --help`. The runner creates external data and does not clean it up automatically.
+For controlled-account release testing, `pnpm smoke:browser:e2e --reads` exercises both read paths. Live writes require all exact Calendar and Slack inputs plus the literal `--confirm LIVE_WRITES_APPROVED`; see `pnpm smoke:browser:e2e --help`. The runner creates external data and does not clean it up automatically.
 
 ## macOS notification triggers
 
