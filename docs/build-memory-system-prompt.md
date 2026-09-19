@@ -1,4 +1,6 @@
-# Codex prompt: build the knowledge base and memory subsystem
+# Historical prompt: build the knowledge base and memory subsystem
+
+> This implementation prompt is retained for design history. Its wiki-memory, lexical search, API, MCP, CLI, and web scope has been implemented. It is not an active backlog; see [the semantic-memory handover](handover/semantic-memory.md) for unfinished memory work.
 
 You are working in the `cc-assistant` repository. Build the first complete, production-shaped vertical slice of its local knowledge base and long-term memory subsystem.
 

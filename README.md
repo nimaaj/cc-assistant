@@ -2,6 +2,17 @@
 
 A local-first assistant control plane for Claude Code: durable state, managed agents, approvals, reminders, browser-backed work integrations, native helpers, memory, MCP, CLI, and a live web dashboard.
 
+## Documentation
+
+- [Installation](docs/installation.md): fresh clone through daemon, dashboard, Claude Code, browser integrations, platform helpers, verification, update, and removal.
+- [Configuration](docs/configuration.md): environment variables, data-directory rules, authentication, and generated state.
+- [Architecture](docs/architecture.md): process boundaries, trust model, persistence, and memory ownership.
+- [Interactive runtime flow](docs/diagrams/cc-assistant-runtime-flow.html): source-grounded request, approval, automation, persistence, and client-update lifecycle.
+- [Development guide](docs/development.md): package ownership, change workflow, verification, and safety review.
+- [Engineering handovers](docs/handover/README.md): implementation-ready plans for unfinished work.
+- [Completion audit](docs/completion-audit.md): implemented versus live-verified capability evidence.
+- [Documentation index](docs/README.md): the complete documentation map.
+
 ## What works now
 
 - SQLite-backed tasks, runs, approvals, schedules, notifications, memories, abilities, browser jobs, sessions, and audit events.
@@ -26,7 +37,9 @@ A local-first assistant control plane for Claude Code: durable state, managed ag
 - pnpm 11 or newer
 - Claude Code 2.1.80 or newer
 
-## Start the development app
+For a fresh machine, follow the full [installation guide](docs/installation.md). The abbreviated development path is:
+
+## Quick development start
 
 ```bash
 pnpm install
@@ -208,7 +221,7 @@ native/macos      Opt-in Notification Center observer
 abilities         Manifest specification and examples
 packages/client   Authenticated daemon client
 packages/shared   Shared schemas and domain types
-docs              Architecture decisions and implementation roadmap
+docs              Installation, operations, architecture, audits, roadmap, and unfinished-work handovers
 ```
 
 ## Security properties

@@ -50,4 +50,14 @@
 - [x] Generate and manage per-user macOS LaunchAgents for the daemon and notification watcher.
 - [x] Add an opt-in signed-in end-to-end runner for controlled Calendar/Slack test accounts; injected Agent SDK contracts run in `pnpm test`.
 - [x] Expose browser jobs, trigger rules, safe command proposals, abilities, and clipboard images in the dashboard control surface.
-- Add a semantic/vector implementation of the existing memory search-provider interface when the separate memory project begins.
+
+## Planned handovers
+
+- [ ] Add a semantic/vector implementation behind the existing memory search-provider seam. See [semantic-memory handover](handover/semantic-memory.md).
+- [ ] Add a host adapter for Codex while preserving the existing Claude Code path. See [additional-agent-hosts handover](handover/additional-agent-hosts.md).
+- [ ] Package versioned release artifacts and Linux user-service installation. See [distribution-and-services handover](handover/distribution-and-services.md).
+
+## Optional and verification work
+
+- [ ] Add a Playwright browser driver only if a concrete deployment requires an alternative to Claude-in-Chrome. See [Playwright driver handover](handover/playwright-browser-driver.md).
+- [ ] Complete controlled write and physical macOS checks. See [live verification runbook](handover/live-verification.md).

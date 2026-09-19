@@ -21,7 +21,9 @@ This matrix distinguishes implementation evidence from environment-dependent liv
 
 ## Required live checks
 
-1. Run `pnpm assistant:doctor`, then `pnpm smoke:browser:e2e --help` and invoke its guarded write mode with a disposable event and safe test channel. The signed-in read paths already passed; writes remain manual because they create external side effects.
+Follow the [live verification runbook](handover/live-verification.md). In summary:
+
+1. Run `pnpm assistant:doctor`, then inspect `pnpm smoke:browser:e2e --help` and invoke its guarded write mode with a disposable event and safe test channel. The signed-in read paths already passed; writes remain manual because they create external side effects.
 2. On macOS, run `pnpm macos:services:install`, grant Accessibility permission to the compiled watcher, test a matching notification trigger, and test a real clipboard image.
 
 ## Automated gates
