@@ -2,6 +2,11 @@
 
 cc-assistant is configured through environment variables. The repository's `.env.example` is a reference file; the current scripts do not automatically load `.env`. Export values in the shell or configure them in the process supervisor before starting the daemon, CLI, MCP bridge, or installer.
 
+Claude Code controller settings are separate from daemon environment variables. The shared hook
+configuration lives in `.claude/settings.json`; strict opt-in sandbox settings live in
+`.claude/controller-sandbox.settings.json` and are applied only by `pnpm controller:sandbox`
+through Claude Code's `--settings` flag. See [the controller-session guide](controller-session.md).
+
 ## Runtime variables
 
 | Variable | Default | Consumer | Meaning |

@@ -20,7 +20,8 @@ Required:
 - Git.
 - Node.js 24. The repository accepts Node versions `>=24 <27`.
 - pnpm 11.19.0, matching the `packageManager` field in `package.json`.
-- Claude Code 2.1.80 or newer, signed in to the intended Claude account.
+- Claude Code 2.1.80 or newer, signed in to the intended Claude account. Version 2.1.275 or
+  newer is recommended for the documented strict controller sandbox settings.
 
 Optional by feature:
 
@@ -134,6 +135,30 @@ The committed `.mcp.json` registers the built MCP bridge for Claude Code session
 
 The MCP process does not own data. It reads the local access token and forwards validated requests to the daemon.
 
+### Dedicated controller session
+
+The project includes a detailed controller prompt and launch commands. With the daemon running:
+
+```bash
+pnpm controller
+```
+
+For strict built-in Bash sandboxing:
+
+```bash
+pnpm controller:sandbox
+```
+
+The sandbox launcher refuses unsandboxed command retries and fails instead of silently starting
+without isolation. On Linux and WSL2, install `bubblewrap` and `socat` first:
+
+```bash
+sudo apt-get install bubblewrap socat
+```
+
+See [Claude Code controller session](controller-session.md) for settings, verification, and the
+distinction between Claude Code's Bash sandbox and cc-assistant's durable approval ledger.
+
 ### Plugin connection across projects
 
 Build and validate the bundled plugin:
@@ -144,7 +169,7 @@ pnpm plugin:validate
 claude --plugin-dir ./claude-plugin
 ```
 
-The plugin contributes the MCP bridge and lifecycle hooks. The daemon must still be running. The plugin selects its token directory in this order:
+The plugin contributes the MCP bridge, lifecycle hooks, and `/cc-assistant:controller` skill. The daemon must still be running. The plugin selects its token directory in this order:
 
 1. explicit `CC_ASSISTANT_DATA_DIR`;
 2. `.data` in the current Claude project when it contains an access token;

@@ -32,6 +32,8 @@ claude-plugin        apps/web
 - `apps/daemon` owns repositories and services.
 - `apps/mcp`, `apps/cli`, and `apps/web` are API clients, not alternate databases.
 - `claude-plugin/server/index.mjs` is a generated, committed bundle of `apps/mcp`.
+- `claude-plugin/skills/controller/SKILL.md` is generated from `prompts/controller.md` by
+  `pnpm plugin:build`; edit the canonical prompt rather than the generated copy.
 
 ## Where to make a change
 
@@ -115,6 +117,14 @@ pnpm plugin:build
 ```
 
 Commit `claude-plugin/server/index.mjs` whenever the MCP source or its bundled dependencies change. Validate the complete plugin with `pnpm plugin:validate`.
+
+Controller prompt or launcher changes should also run:
+
+```bash
+node scripts/start-controller.mjs --sandbox --dry-run
+pnpm plugin:build
+pnpm plugin:validate
+```
 
 ## Safety review checklist
 

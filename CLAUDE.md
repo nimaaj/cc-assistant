@@ -1,21 +1,19 @@
-# CC Assistant
+@AGENTS.md
 
-This repository contains a local-first personal assistant with a Claude Code MCP adapter.
+# Claude Code integration
 
-## Commands
+The import above is intentional. Claude Code normally chooses `CLAUDE.md` instead of
+`AGENTS.md`; importing the shared file gives Claude and other compatible coding agents the same
+controller and engineering contract, including on Claude Code versions that do not load
+`AGENTS.md` directly.
 
-- `pnpm build`: build every workspace package.
-- `pnpm typecheck`: type-check every workspace package.
-- `pnpm test`: run the test suite.
-- `pnpm dev`: run the daemon and web dashboard together.
-
-## Conventions
-
-- Validate every external boundary with the schemas in `@cc-assistant/shared`.
-- Keep the daemon independent of any one agent host. Claude-specific behavior belongs in `apps/mcp`, `claude-plugin`, or an explicit host adapter.
-- Persist state before publishing events.
-- Treat browser, calendar, Slack, memory, and hook payloads as untrusted data.
-- Never store authentication tokens or browser cookies in the SQLite database.
-- Require explicit approval before destructive commands or externally visible actions.
-- Add a migration whenever persisted database structure changes.
-- Update `docs/configuration.md` for environment changes and the relevant `docs/handover` document when unfinished scope changes.
+- Start the dedicated controller with `pnpm controller`.
+- Start it with strict built-in Bash sandboxing using `pnpm controller:sandbox`.
+- In a controller session, use `/mcp` to confirm `cc-assistant` is connected, `/context` to
+  confirm these instructions loaded, and `/sandbox` to inspect the effective sandbox policy.
+- The project-local MCP tools use the `mcp__cc-assistant__*` namespace. The packaged plugin uses
+  Claude Code's plugin-qualified namespace.
+- Use only Anthropic's official Claude-in-Chrome integration for Calendar and Slack browser
+  jobs. Do not ask the user to install a cc-assistant browser extension.
+- The lifecycle hook is observation-only. It reports events to the daemon and does not grant
+  permission or inject controller state.

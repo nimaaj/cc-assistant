@@ -8,6 +8,7 @@ A local-first assistant control plane for Claude Code: durable state, managed ag
 - [Configuration](docs/configuration.md): environment variables, data-directory rules, authentication, and generated state.
 - [Architecture](docs/architecture.md): process boundaries, trust model, persistence, and memory ownership.
 - [Interactive runtime flow](docs/diagrams/cc-assistant-runtime-flow.html): source-grounded request, approval, automation, persistence, and client-update lifecycle.
+- [Claude controller session](docs/controller-session.md): controller prompt loading, plugin activation, and strict sandbox mode.
 - [Development guide](docs/development.md): package ownership, change workflow, verification, and safety review.
 - [Engineering handovers](docs/handover/README.md): implementation-ready plans for unfinished work.
 - [Completion audit](docs/completion-audit.md): implemented versus live-verified capability evidence.
@@ -73,6 +74,20 @@ The production daemon serves both the authenticated API and the built dashboard 
 The committed `.mcp.json` registers the built MCP bridge for this project. Build the project and keep the daemon running, then restart Claude Code from this directory and check `/mcp`.
 
 The MCP bridge reads the same `.data/access-token` file as the daemon. Its tools cover tasks, observed sessions, managed runs, command proposals, approvals, schedules/reminders, memory, abilities, clipboard images, Calendar, Slack, and browser-job polling. Restart Claude Code after rebuilding so it reloads the tool list.
+
+For a dedicated controlling session, use:
+
+```bash
+pnpm controller
+```
+
+To enable Claude Code's built-in Bash sandbox with no unsandboxed fallback and a hard failure when isolation is unavailable:
+
+```bash
+pnpm controller:sandbox
+```
+
+Both launchers load the canonical controller operating guide through `CLAUDE.md` and initialize with a read-only state snapshot. See the [controller-session guide](docs/controller-session.md) for the exact policy, Linux dependencies, plugin skill, and verification steps.
 
 The daemon must remain running for the tools to work. The MCP bridge is intentionally small and contains no durable state.
 

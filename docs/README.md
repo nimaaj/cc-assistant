@@ -10,6 +10,7 @@ This directory is the source of truth for operating, extending, and handing over
 | Configure paths, ports, limits, and browser workers | [Configuration](configuration.md) |
 | Understand the system boundaries and data ownership | [Architecture](architecture.md) |
 | Explore the runtime request and automation lifecycle | [Interactive runtime flow](diagrams/cc-assistant-runtime-flow.html) |
+| Run the controlling Claude session or enable strict sandbox mode | [Claude controller session](controller-session.md) |
 | Work on the codebase | [Development guide](development.md) |
 | See implemented and verified capabilities | [Completion audit](completion-audit.md) |
 | See the product roadmap | [Roadmap](roadmap.md) |
@@ -19,6 +20,7 @@ This directory is the source of truth for operating, extending, and handing over
 
 - `installation.md`, `configuration.md`, and `development.md` describe the current repository.
 - `architecture.md` records current runtime boundaries and invariants.
+- `controller-session.md` records controller prompt loading and the opt-in Claude Code sandbox policy.
 - `completion-audit.md` separates implemented code from environment-dependent live verification.
 - `roadmap.md` is the concise backlog. Detailed designs live under `handover/`.
 - `build-memory-system-prompt.md` is retained as historical implementation context. Its lexical/wiki-memory scope is complete; it is not an active task list.
