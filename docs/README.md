@@ -6,6 +6,7 @@ This directory is the source of truth for operating, extending, and handing over
 
 | Goal | Document |
 | --- | --- |
+| Hand the whole project to another coding agent | [Continuation handoff](../HANDOFF.md) |
 | Install from a fresh clone | [Installation](installation.md) |
 | Configure paths, ports, limits, and browser workers | [Configuration](configuration.md) |
 | Understand the system boundaries and data ownership | [Architecture](architecture.md) |

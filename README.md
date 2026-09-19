@@ -2,6 +2,8 @@
 
 A local-first assistant control plane for Claude Code: durable state, managed agents, approvals, reminders, browser-backed work integrations, native helpers, memory, MCP, CLI, and a live web dashboard.
 
+For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md).
+
 ## Documentation
 
 - [Installation](docs/installation.md): fresh clone through daemon, dashboard, Claude Code, browser integrations, platform helpers, verification, update, and removal.
