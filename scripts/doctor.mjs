@@ -79,9 +79,9 @@ if (claudePath) {
   const version = spawnSync(claudePath, ["--version"], { encoding: "utf8", timeout: 5_000 });
   const label = version.stdout.trim() || `Claude CLI at ${claudePath}`;
   const match = label.match(/(\d+)\.(\d+)\.(\d+)/);
-  const supported = version.status === 0 && match !== null && atLeast(match.slice(1).map(Number), [2, 1, 80]);
+  const supported = version.status === 0 && match !== null && atLeast(match.slice(1).map(Number), [2, 1, 257]);
   add("claude", supported ? "pass" : "fail", version.status === 0 ? label : "Claude CLI did not start",
-    supported ? undefined : "Install Claude Code 2.1.80 or newer and verify claude --version.");
+    supported ? undefined : "Install Claude Code 2.1.257 or newer and verify claude --version.");
 } else {
   add("claude", "fail", "Claude CLI was not found on PATH", "Install Claude Code and ensure claude is on PATH.");
 }

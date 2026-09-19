@@ -20,7 +20,7 @@ Required:
 - Git.
 - Node.js 24. The repository accepts Node versions `>=24 <27`.
 - pnpm 11.19.0, matching the `packageManager` field in `package.json`.
-- Claude Code 2.1.80 or newer, signed in to the intended Claude account. Version 2.1.275 or
+- Claude Code 2.1.257 or newer, signed in to the intended Claude account. Version 2.1.275 or
   newer is recommended for the documented strict controller sandbox settings.
 
 Optional by feature:
@@ -158,6 +158,17 @@ sudo apt-get install bubblewrap socat
 
 See [Claude Code controller session](controller-session.md) for settings, verification, and the
 distinction between Claude Code's Bash sandbox and cc-assistant's durable approval ledger.
+
+### Verify session orchestration
+
+Claude Code 2.1.257 or newer exposes the supported agent-view JSON and background resume behavior used by cc-assistant. With at least one Claude session open, run:
+
+```bash
+claude agents --json --all
+pnpm cca claude-session list
+```
+
+The second command should show the same registered sessions through the authenticated daemon. In the dashboard, **Claude sessions** offers dispatch, messaging, stop, respawn, and remove proposals. Each action must appear in **Managed work** as `waiting approval` before it can run. See [Claude session orchestration](claude-session-orchestration.md) for the exact boundaries.
 
 ### Plugin connection across projects
 

@@ -5,6 +5,7 @@ import {
   type AssistantNotification,
   type BrowserAutomationStatus,
   type BrowserJob,
+  type ClaudeAgentSession,
   type ClaudeSession,
   type Memory,
   type MemoryLink,
@@ -19,6 +20,7 @@ import {
   AuthenticationError,
   archiveMemory,
   cancelRun,
+  controlClaudeSession,
   createBrowserJob,
   createMemory,
   createReminder,
@@ -31,6 +33,7 @@ import {
   invokeAbility,
   listAbilities,
   listBrowserJobs,
+  listClaudeAgentSessions,
   listMemories,
   listNotifications,
   listPendingApprovals,
@@ -261,6 +264,45 @@ function SessionStrip({ sessions }: { sessions: ClaudeSession[] }): React.JSX.El
       </div>
     </section>
   );
+}
+
+function ClaudeSessionControlPanel({ sessions, defaultCwd, onChange }: {
+  sessions: ClaudeAgentSession[]; defaultCwd: string; onChange: () => void;
+}): React.JSX.Element {
+  const [messages, setMessages] = useState<Record<string, string>>({});
+  const [prompt, setPrompt] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState<string>();
+  const propose = async (key: string, input: Parameters<typeof controlClaudeSession>[0]): Promise<void> => {
+    setBusy(key);
+    try { await controlClaudeSession(input); onChange(); } finally { setBusy(undefined); }
+  };
+  return <section className="sessions session-control">
+    <div className="section-heading"><div><p className="eyebrow">Orchestration</p><h2>Claude sessions</h2></div><span>{sessions.filter((session) => session.pid).length} running</span></div>
+    <form className="session-dispatch" onSubmit={(event) => {
+      event.preventDefault();
+      if (prompt.trim()) void propose("dispatch", { action: "dispatch", cwd: defaultCwd, prompt, ...(name.trim() ? { name } : {}) }).then(() => { setPrompt(""); setName(""); });
+    }}>
+      <input aria-label="Session name" placeholder="Optional session name" value={name} onChange={(event) => setName(event.target.value)} />
+      <input aria-label="Session task" placeholder="Dispatch a background task…" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+      <button className="primary" disabled={busy === "dispatch" || !prompt.trim()}>Propose dispatch</button>
+    </form>
+    <div className="session-list">
+      {sessions.map((session) => {
+        const target = session.id ?? session.sessionId ?? session.name ?? "";
+        const key = session.sessionId ?? `${session.cwd}:${session.startedAt}`;
+        return <article className="session-card controllable" key={key}>
+          <div className="session-title"><i className={`session-dot ${session.status ?? session.state ?? "ended"}`} /><strong>{session.name ?? session.id ?? "Unnamed"}</strong><span className={`session-status ${session.status ?? session.state ?? "ended"}`}>{session.status ?? session.state ?? "saved"}</span></div>
+          <p>{session.kind} · {session.waitingFor ?? session.state ?? "unknown"}</p>
+          <div className="session-meta"><span>{session.cwd.split("/").filter(Boolean).at(-1) ?? session.cwd}</span><span>{session.id ?? "interactive"}</span></div>
+          {session.pid && session.name ? <div className="session-message"><input aria-label={`Message ${session.name}`} placeholder="Message this session…" value={messages[key] ?? ""} onChange={(event) => setMessages({ ...messages, [key]: event.target.value })} /><button disabled={!messages[key]?.trim() || busy === key} onClick={() => void propose(key, { action: "message", target, message: messages[key]! }).then(() => setMessages({ ...messages, [key]: "" }))}>Propose message</button></div> : null}
+          {session.kind === "background" && session.id ? <div className="session-actions"><button disabled={busy === key} onClick={() => void propose(key, { action: "stop", target })}>Stop</button><button disabled={busy === key} onClick={() => void propose(key, { action: "respawn", target })}>Respawn</button><button className="danger" disabled={busy === key} onClick={() => void propose(key, { action: "remove", target })}>Remove</button></div> : null}
+        </article>;
+      })}
+      {sessions.length === 0 ? <div className="session-empty">No Claude Code sessions are currently registered with agent view.</div> : null}
+    </div>
+    <p className="session-safety">Every message and lifecycle action is queued for one-time approval. Target-session permission rules still apply.</p>
+  </section>;
 }
 
 function ExecutionPanel({
@@ -670,6 +712,7 @@ function MemoryWorkspace({ memories, onChange }: { memories: Memory[]; onChange:
 export default function App(): React.JSX.Element {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [sessions, setSessions] = useState<ClaudeSession[]>([]);
+  const [claudeAgentSessions, setClaudeAgentSessions] = useState<ClaudeAgentSession[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [notifications, setNotifications] = useState<AssistantNotification[]>([]);
@@ -687,11 +730,12 @@ export default function App(): React.JSX.Element {
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const [nextTasks, nextSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, config, nextBrowserStatus] = await Promise.all([
-        listTasks(), listSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), getConfig(), getBrowserStatus(),
+      const [nextTasks, nextSessions, nextClaudeAgentSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, config, nextBrowserStatus] = await Promise.all([
+        listTasks(), listSessions(), listClaudeAgentSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), getConfig(), getBrowserStatus(),
       ]);
       setTasks(nextTasks);
       setSessions(nextSessions);
+      setClaudeAgentSessions(nextClaudeAgentSessions);
       setRuns(nextRuns);
       setApprovals(nextApprovals);
       setNotifications(nextNotifications);
@@ -774,6 +818,7 @@ export default function App(): React.JSX.Element {
 
       <MemoryWorkspace memories={memories} onChange={() => void refresh()} />
 
+      <ClaudeSessionControlPanel sessions={claudeAgentSessions} defaultCwd={defaultCwd} onChange={() => void refresh()} />
       <SessionStrip sessions={sessions} />
       <ExecutionPanel runs={runs} approvals={approvals} onChange={() => void refresh()} />
 

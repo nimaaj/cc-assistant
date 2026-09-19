@@ -5,6 +5,7 @@ import { parseArgs } from "node:util";
 import { DaemonClient } from "@cc-assistant/client";
 import {
   ApprovalListSchema,
+  ClaudeAgentSessionListSchema,
   ClaudeSessionListSchema,
   RunListSchema,
   RunSchema,
@@ -12,6 +13,7 @@ import {
   TaskSchema,
   taskStatuses,
   type ClaudeSession,
+  type ClaudeAgentSession,
   type Task,
   type TaskStatus,
 } from "@cc-assistant/shared";
@@ -63,6 +65,15 @@ function printSessions(sessions: ClaudeSession[]): void {
   );
 }
 
+function printClaudeAgentSessions(sessions: ClaudeAgentSession[]): void {
+  if (jsonOutput) return printJson({ sessions });
+  console.table(sessions.map((session) => ({
+    id: session.id ?? "", name: session.name ?? "", kind: session.kind,
+    state: session.state ?? "", status: session.status ?? "", waitingFor: session.waitingFor ?? "",
+    cwd: session.cwd, sessionId: session.sessionId ?? "",
+  })));
+}
+
 function help(): never {
   console.log(`cc-assistant developer CLI
 
@@ -80,6 +91,14 @@ Usage:
   pnpm cca task complete <id> [--revision <number>]
   pnpm cca session list [--all] [--json]
   pnpm cca session get <id> [--json]
+  pnpm cca claude-session list [--active] [--json]
+  pnpm cca claude-session logs <id-or-name>
+  pnpm cca claude-session message <id-or-name> <message>
+  pnpm cca claude-session dispatch <prompt> --cwd <path> [--name <name>]
+                                  [--model <model>] [--effort <level>]
+                                  [--permission-mode <mode>]
+  pnpm cca claude-session continue <id-or-name> <prompt>
+  pnpm cca claude-session stop|respawn|remove <id-or-name>
   pnpm cca run list [--status <status>] [--json]
   pnpm cca run get <id> [--json]
   pnpm cca run logs <id> [--after <sequence>] [--json]
@@ -298,6 +317,56 @@ async function sessionCommand(args: string[]): Promise<void> {
       session: unknown;
     };
     return jsonOutput ? printJson(payload) : printSessions([payload.session as ClaudeSession]);
+  }
+  help();
+}
+
+async function claudeSessionCommand(args: string[]): Promise<void> {
+  const action = args.shift();
+  if (action === "list") {
+    const parsed = parseArgs({ args, options: { active: { type: "boolean" } }, strict: true });
+    const payload = ClaudeAgentSessionListSchema.parse(await client.request(
+      `/api/claude/sessions?includeCompleted=${!parsed.values.active}`,
+    ));
+    return printClaudeAgentSessions(payload.sessions);
+  }
+  if (action === "logs") {
+    const target = required(args[0], "session ID or name");
+    const payload = await client.request(`/api/claude/sessions/${encodeURIComponent(target)}/logs`) as { logs: string };
+    if (jsonOutput) printJson(payload);
+    else process.stdout.write(payload.logs.endsWith("\n") ? payload.logs : `${payload.logs}\n`);
+    return;
+  }
+  if (action === "dispatch") {
+    const parsed = parseArgs({
+      args,
+      allowPositionals: true,
+      strict: true,
+      options: {
+        cwd: { type: "string" }, name: { type: "string" }, model: { type: "string" },
+        effort: { type: "string" }, "permission-mode": { type: "string" },
+      },
+    });
+    const body = {
+      action, prompt: required(parsed.positionals[0], "prompt"), cwd: required(parsed.values.cwd, "--cwd"),
+      ...(parsed.values.name ? { name: parsed.values.name } : {}),
+      ...(parsed.values.model ? { model: parsed.values.model } : {}),
+      ...(parsed.values.effort ? { effort: parsed.values.effort } : {}),
+      ...(parsed.values["permission-mode"] ? { permissionMode: parsed.values["permission-mode"] } : {}),
+    };
+    return printJson(await client.request("/api/claude/sessions/control", { method: "POST", body: JSON.stringify(body) }));
+  }
+  if (action === "message" || action === "continue") {
+    const target = required(args[0], "session ID or name");
+    const text = required(args[1], action === "message" ? "message" : "prompt");
+    const body = action === "message" ? { action, target, message: text } : { action, target, prompt: text };
+    return printJson(await client.request("/api/claude/sessions/control", { method: "POST", body: JSON.stringify(body) }));
+  }
+  if (action === "stop" || action === "respawn" || action === "remove") {
+    const target = required(args[0], "session ID or name");
+    return printJson(await client.request("/api/claude/sessions/control", {
+      method: "POST", body: JSON.stringify({ action, target }),
+    }));
   }
   help();
 }
@@ -604,6 +673,7 @@ async function main(): Promise<void> {
   if (!command || command === "help" || command === "--help" || command === "-h") help();
   if (command === "task") return taskCommand(rawArgs);
   if (command === "session") return sessionCommand(rawArgs);
+  if (command === "claude-session") return claudeSessionCommand(rawArgs);
   if (command === "event") return eventCommand(rawArgs);
   if (command === "run") return runCommand(rawArgs);
   if (command === "approval") return approvalCommand(rawArgs);

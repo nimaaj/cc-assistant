@@ -4,6 +4,7 @@ import {
   AssistantNotificationListSchema,
   BrowserAutomationStatusSchema,
   BrowserJobListSchema,
+  ClaudeAgentSessionListSchema,
   ClaudeSessionListSchema,
   MemoryListSchema,
   MemoryRecordSchema,
@@ -15,6 +16,8 @@ import {
   TaskSchema,
   type CreateTaskInput,
   type ClaudeSession,
+  type ClaudeAgentSession,
+  type ClaudeSessionControlInput,
   type Approval,
   type AbilityManifest,
   type AssistantNotification,
@@ -69,6 +72,14 @@ export async function listTasks(): Promise<Task[]> {
 
 export async function listSessions(): Promise<ClaudeSession[]> {
   return ClaudeSessionListSchema.parse(await request("/api/sessions")).sessions;
+}
+
+export async function listClaudeAgentSessions(): Promise<ClaudeAgentSession[]> {
+  return ClaudeAgentSessionListSchema.parse(await request("/api/claude/sessions?includeCompleted=true")).sessions;
+}
+
+export async function controlClaudeSession(input: ClaudeSessionControlInput): Promise<void> {
+  await request("/api/claude/sessions/control", { method: "POST", body: JSON.stringify(input) });
 }
 
 export async function listRuns(): Promise<Run[]> {

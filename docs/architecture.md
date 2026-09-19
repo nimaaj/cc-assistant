@@ -20,6 +20,10 @@ SQLite is not a public mutation interface. Every writer uses the daemon so valid
 - Ability commands use manifest validation, shell-free argument arrays, allowed working-directory roots, stripped secret and execution-control environment variables, and one-time approvals whose exact payload is inspectable in the dashboard.
 - Browser content is untrusted even when it comes from a signed-in work account.
 - A trigger may propose a sensitive operation but cannot approve it.
+- Claude session discovery reads `claude agents --json --all`; logs and lifecycle controls use
+  the documented Claude CLI. Cross-session delivery is delegated to a tool-limited Claude
+  process with only `ListAgents` and `SendMessage`. Every mutation is approval-backed, target
+  permission rules remain authoritative, and no terminal input or private job file is injected.
 - Account tokens remain in the macOS Keychain or the owning browser profile.
 
 ## Google Calendar constraint
@@ -40,7 +44,7 @@ All mutable entities use revisions or internal queue claims where concurrent act
 
 ## State transitions
 
-Commands and browser writes start in `waiting_approval`. Approval resolution is durable and auditable; command execution uses `spawn(executable, args, { shell: false })`. Managed Claude runs use the Agent SDK permission callback, which parks a tool request until its approval is resolved. Agent runs that are interrupted by a daemon restart are failed and their unserviceable approvals expire. Browser jobs are claimed by the daemon's single-worker queue; interrupted claims are requeued on startup.
+Commands, Claude session controls, and browser writes start in `waiting_approval`. Approval resolution is durable and auditable; command and session-control execution uses `spawn(executable, args, { shell: false })`. Managed Claude runs use the Agent SDK permission callback, which parks a tool request until its approval is resolved. Agent runs that are interrupted by a daemon restart are failed and their unserviceable approvals expire. Browser jobs are claimed by the daemon's single-worker queue; interrupted claims are requeued on startup.
 
 Schedules store their next fire time in SQLite. One-time triggers disable after firing; interval triggers compute the next timestamp; notification triggers require at least one filter, stay enabled, and enforce a cooldown. Complete trigger/action payloads are validated on create and edit, and edits use optimistic revisions. Reminder delivery always enters the web inbox even if native desktop delivery fails.
 

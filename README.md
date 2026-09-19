@@ -36,7 +36,7 @@ A local-first assistant control plane for Claude Code: durable state, managed ag
 
 - Node.js 24 LTS
 - pnpm 11 or newer
-- Claude Code 2.1.80 or newer
+- Claude Code 2.1.257 or newer (2.1.275 or newer recommended)
 
 For a fresh machine, follow the full [installation guide](docs/installation.md). The abbreviated development path is:
 
@@ -73,7 +73,7 @@ The production daemon serves both the authenticated API and the built dashboard 
 
 The committed `.mcp.json` registers the built MCP bridge for this project. Build the project and keep the daemon running, then restart Claude Code from this directory and check `/mcp`.
 
-The MCP bridge reads the same `.data/access-token` file as the daemon. Its tools cover tasks, observed sessions, managed runs, command proposals, approvals, schedules/reminders, memory, abilities, clipboard images, Calendar, Slack, and browser-job polling. Restart Claude Code after rebuilding so it reloads the tool list.
+The MCP bridge reads the same `.data/access-token` file as the daemon. Its tools cover tasks, observed sessions, live Claude session inventory/control, managed runs, command proposals, approvals, schedules/reminders, memory, abilities, clipboard images, Calendar, Slack, and browser-job polling. Restart Claude Code after rebuilding so it reloads the tool list.
 
 For a dedicated controlling session, use:
 
@@ -116,6 +116,20 @@ pnpm hooks:install-global
 ```
 
 The installer preserves existing hooks and creates `~/.claude/settings.json.cc-assistant-backup`. Undo it with `pnpm hooks:remove-global`. Restart existing Claude sessions after installation; a session that never emits a hook cannot be discovered retroactively.
+
+## Orchestrate Claude Code sessions
+
+The dashboard's **Claude sessions** section and the `claude_session_*` MCP tools use Claude Code's supported agent-view interfaces. Reads come from `claude agents --json --all` and `claude logs`. Mutations can dispatch, message, continue, stop, respawn, or remove background sessions. Every mutation first creates a durable approval showing the exact target and command; approving it does not bypass the target session's own permission or inbound-message policy.
+
+```bash
+pnpm cca claude-session list
+pnpm cca claude-session logs <id-or-name>
+pnpm cca claude-session message <id-or-name> "Status update?"
+pnpm cca claude-session dispatch "Investigate the failing test" --cwd "$PWD" --name test-worker
+pnpm cca claude-session stop <id-or-name>
+```
+
+Messages use Claude Code's native `ListAgents`/`SendMessage` boundary. The daemon never injects terminal keystrokes and never edits `~/.claude/jobs` or transcript files. See [Claude session orchestration](docs/claude-session-orchestration.md) for the supported operations and safety model.
 
 ## Developer CLI
 

@@ -15,5 +15,6 @@ controller and engineering contract, including on Claude Code versions that do n
   Claude Code's plugin-qualified namespace.
 - Use only Anthropic's official Claude-in-Chrome integration for Calendar and Slack browser
   jobs. Do not ask the user to install a cc-assistant browser extension.
-- The lifecycle hook is observation-only. It reports events to the daemon and does not grant
-  permission or inject controller state.
+- Lifecycle hooks remain observation-only. Live session control uses Claude Code's supported
+  agent-view CLI and cross-session messaging tools through approval-backed cc-assistant actions;
+  it never injects terminal input or edits Claude's private state files.

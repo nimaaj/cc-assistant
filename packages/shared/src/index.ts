@@ -103,6 +103,49 @@ export const ClaudeSessionListSchema = z.object({
   sessions: z.array(ClaudeSessionSchema),
 });
 
+export const ClaudeAgentSessionSchema = z.object({
+  id: z.string().min(1).nullable(),
+  sessionId: z.string().min(1).nullable(),
+  name: z.string().min(1).nullable(),
+  cwd: z.string().min(1),
+  kind: z.enum(["interactive", "background"]),
+  startedAt: z.number().int().nonnegative(),
+  state: z.enum(["working", "blocked", "done", "failed", "stopped"]).nullable(),
+  pid: z.number().int().positive().nullable(),
+  status: z.enum(["busy", "waiting", "idle"]).nullable(),
+  waitingFor: z.string().min(1).nullable(),
+});
+export type ClaudeAgentSession = z.infer<typeof ClaudeAgentSessionSchema>;
+export const ClaudeAgentSessionListSchema = z.object({ sessions: z.array(ClaudeAgentSessionSchema) });
+
+const ClaudeSessionTargetSchema = z.string().trim().min(1).max(240);
+export const ClaudeSessionControlSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("message"),
+    target: ClaudeSessionTargetSchema,
+    message: z.string().trim().min(1).max(100_000),
+  }).strict(),
+  z.object({
+    action: z.literal("continue"),
+    target: ClaudeSessionTargetSchema,
+    prompt: z.string().trim().min(1).max(100_000),
+  }).strict(),
+  z.object({
+    action: z.enum(["stop", "respawn", "remove"]),
+    target: ClaudeSessionTargetSchema,
+  }).strict(),
+  z.object({
+    action: z.literal("dispatch"),
+    cwd: z.string().min(1),
+    prompt: z.string().trim().min(1).max(100_000),
+    name: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/).optional(),
+    model: z.string().trim().min(1).max(120).optional(),
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+    permissionMode: z.enum(["default", "acceptEdits", "plan", "dontAsk"]).default("default"),
+  }).strict(),
+]);
+export type ClaudeSessionControlInput = z.input<typeof ClaudeSessionControlSchema>;
+
 export const ClaudeHookInputSchema = z
   .object({
     session_id: z.string().min(1),

@@ -11,6 +11,7 @@ This directory is the source of truth for operating, extending, and handing over
 | Understand the system boundaries and data ownership | [Architecture](architecture.md) |
 | Explore the runtime request and automation lifecycle | [Interactive runtime flow](diagrams/cc-assistant-runtime-flow.html) |
 | Run the controlling Claude session or enable strict sandbox mode | [Claude controller session](controller-session.md) |
+| Manage and orchestrate local Claude Code sessions | [Claude session orchestration](claude-session-orchestration.md) |
 | Work on the codebase | [Development guide](development.md) |
 | See implemented and verified capabilities | [Completion audit](completion-audit.md) |
 | See the product roadmap | [Roadmap](roadmap.md) |

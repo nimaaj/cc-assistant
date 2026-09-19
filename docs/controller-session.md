@@ -150,11 +150,17 @@ Inside Claude Code:
 3. In sandbox mode, run `/sandbox` and confirm strict mode is active.
 4. Run `/permissions` to inspect file and tool rules.
 5. Ask for current tasks. The controller should read durable state before summarizing it.
-6. Ask what it would do before approving an external write. It should describe the exact payload
+6. Ask it to list other Claude sessions. It should use the supported live inventory and distinguish
+   that from last-observed hook history.
+7. Ask it to propose a message to a named test session. The proposal should enter the approval
+   queue without sending until you approve it.
+8. Ask what it would do before approving an external write. It should describe the exact payload
    and wait rather than resolving the approval itself.
 
 The lifecycle hooks do not inject controller instructions. They report session events to the
-daemon so the dashboard and other clients can observe the latest session state.
+daemon so the dashboard and other clients can observe the latest session state. Live control uses
+Claude Code's agent-view CLI and cross-session messaging boundaries; see
+[Claude session orchestration](claude-session-orchestration.md).
 
 ## Updating the prompt
 

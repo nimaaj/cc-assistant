@@ -17,6 +17,7 @@
 - [x] Worktree isolation
 - [x] Safe local process runner
 - [x] Claude Code hook receiver
+- [x] Approval-backed Claude Code session inventory, messaging, and lifecycle orchestration
 - [x] Session dashboard and MCP inspection tools
 - [x] Project MCP and hook packaging
 - [x] Managed run dashboard

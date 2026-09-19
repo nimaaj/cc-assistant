@@ -27,6 +27,16 @@ interface ActiveExecution {
   close?: () => void;
 }
 
+export interface SessionControlCommand {
+  action: string;
+  title: string;
+  summary: string;
+  args: string[];
+  cwd: string;
+  payload: Record<string, unknown>;
+  timeoutMs?: number;
+}
+
 const SECRET_ENV_NAME = /(TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|AUTH|COOKIE|SESSION|BEARER|(^|_)PAT($|_)|SSH_)/i;
 const EXECUTION_CONTROL_ENV_NAME = /^(PATH|NODE_OPTIONS|NODE_PATH|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_.+|BASH_ENV|ENV|SHELLOPTS|PYTHONPATH|PYTHONHOME|RUBYOPT|PERL5OPT)$/i;
 const COMMAND_KILL_GRACE_MS = 2_000;
@@ -135,6 +145,35 @@ export class ExecutionService {
         cwd,
         timeoutMs: input.timeoutMs,
         env: input.env,
+      },
+    });
+    return { run, approval };
+  }
+
+  proposeSessionControl(input: SessionControlCommand): { run: Run; approval: Approval } {
+    const cwd = this.#allowedDirectory(input.cwd);
+    const timeoutMs = input.timeoutMs ?? 120_000;
+    const run = this.#repository.createRun({
+      kind: "command",
+      status: "waiting_approval",
+      title: input.title,
+      cwd,
+      metadata: {
+        executable: "claude",
+        args: input.args,
+        timeoutMs,
+        env: {},
+        sessionControlAction: input.action,
+      },
+    });
+    const approval = this.#repository.createApproval({
+      runId: run.id,
+      actionType: "claude_session_control",
+      summary: input.summary,
+      payload: {
+        action: input.action,
+        ...input.payload,
+        command: { executable: "claude", args: input.args, cwd, timeoutMs },
       },
     });
     return { run, approval };

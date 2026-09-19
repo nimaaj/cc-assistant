@@ -6,6 +6,7 @@ import {
   ApprovalSchema,
   AbilityManifestSchema,
   BrowserJobRequestSchema,
+  ClaudeSessionControlSchema,
   CreateMemorySchema,
   IngestMemorySchema,
   CreateScheduleSchema,
@@ -25,6 +26,7 @@ import type { DaemonConfig } from "./config.js";
 import { AssistantRepository, ScheduleNotFoundError, ScheduleRevisionConflictError } from "./assistant-repository.js";
 import { AutomationService } from "./automation-service.js";
 import { BrowserAutomationService, type BrowserAgentQuery } from "./browser-automation-service.js";
+import { ClaudeSessionControlService } from "./claude-session-control-service.js";
 import { EventHub } from "./event-hub.js";
 import { ExecutionRepository } from "./execution-repository.js";
 import { ExecutionInputError, ExecutionService, RunNotFoundError } from "./execution-service.js";
@@ -75,6 +77,7 @@ export interface AppDependencies {
   automationService?: AutomationService;
   browserAutomationService?: BrowserAutomationService;
   browserAgentQuery?: BrowserAgentQuery;
+  claudeSessionControlService?: ClaudeSessionControlService;
   nativeService?: NativeService;
   memoryRepository?: MemoryRepository;
   eventHub?: EventHub;
@@ -120,6 +123,8 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     new ExecutionRepository(dependencies.config.databasePath, (event) => eventHub.publish(event));
   const executionService =
     dependencies.executionService ?? new ExecutionService(executionRepository, dependencies.config);
+  const claudeSessionControlService = dependencies.claudeSessionControlService ??
+    new ClaudeSessionControlService(executionService, dependencies.config);
   const assistantRepository = dependencies.assistantRepository ??
     new AssistantRepository(dependencies.config.databasePath, (event) => eventHub.publish(event));
   const nativeService = dependencies.nativeService ?? new NativeService();
@@ -307,6 +312,26 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   app.post("/api/hooks/claude", async (request) => {
     const session = sessionRepository.ingest(request.body);
     return { accepted: true, session };
+  });
+
+  app.get("/api/claude/sessions", async (request) => {
+    const query = z.object({ includeCompleted: z.stringbool().default(true) }).parse(request.query);
+    return { sessions: await claudeSessionControlService.list(query.includeCompleted) };
+  });
+
+  app.get("/api/claude/sessions/:reference", async (request) => {
+    const reference = z.object({ reference: z.string().min(1) }).parse(request.params).reference;
+    return { session: await claudeSessionControlService.get(reference) };
+  });
+
+  app.get("/api/claude/sessions/:reference/logs", async (request) => {
+    const reference = z.object({ reference: z.string().min(1) }).parse(request.params).reference;
+    return { logs: await claudeSessionControlService.logs(reference) };
+  });
+
+  app.post("/api/claude/sessions/control", async (request, reply) => {
+    const proposed = await claudeSessionControlService.propose(ClaudeSessionControlSchema.parse(request.body));
+    return reply.code(202).send(proposed);
   });
 
   app.get("/api/runs", async (request) => {
