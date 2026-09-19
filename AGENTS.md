@@ -4,13 +4,14 @@
 
 ## Repository commands
 
-- Install dependencies with `pnpm install --frozen-lockfile`.
-- Build all workspaces with `pnpm build`.
-- Type-check with `pnpm typecheck`.
-- Run the full test suite with `pnpm test`.
-- Run the development daemon and dashboard with `pnpm dev`.
+- Install dependencies with `pnpm install --frozen-lockfile` (recommended) or `npm ci`.
+- Build all workspaces with `pnpm build` or `npm run build`.
+- Type-check with `pnpm typecheck` or `npm run typecheck`.
+- Run the full test suite with `pnpm test` or `npm test`.
+- Run the development daemon and dashboard with `pnpm dev` or `npm run dev`.
 - Rebuild and validate the Claude Code plugin with `pnpm plugin:build` and
-  `pnpm plugin:validate` whenever MCP or plugin content changes.
+  `pnpm plugin:validate` (or their `npm run` equivalents) whenever MCP or plugin content changes.
+- Use one package manager per checkout and keep both lockfiles current after dependency changes.
 
 ## Engineering conventions
 

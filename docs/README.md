@@ -8,8 +8,12 @@ This directory is the source of truth for operating, extending, and handing over
 | --- | --- |
 | Hand the whole project to another coding agent | [Continuation handoff](../HANDOFF.md) |
 | Install from a fresh clone | [Installation](installation.md) |
+| Use npm instead of pnpm | [Package managers](package-managers.md) |
 | Configure paths, ports, limits, and browser workers | [Configuration](configuration.md) |
 | Understand the system boundaries and data ownership | [Architecture](architecture.md) |
+| Use or migrate the standalone wiki knowledge base | [Memory and knowledge base](memory.md) |
+| Follow the memory capture/edit operating conventions | [Knowledge-base playbook](cc-assistant-knowledge-base-playbook.md) |
+| Explore the knowledge-base data flow | [Knowledge-base flowchart](diagrams/cc-knowledge-base-swimlane-flow.html) |
 | Explore the runtime request and automation lifecycle | [Interactive runtime flow](diagrams/cc-assistant-runtime-flow.html) |
 | Run the controlling Claude session or enable strict sandbox mode | [Claude controller session](controller-session.md) |
 | Manage and orchestrate local Claude Code sessions | [Claude session orchestration](claude-session-orchestration.md) |
@@ -20,7 +24,7 @@ This directory is the source of truth for operating, extending, and handing over
 
 ## Document status
 
-- `installation.md`, `configuration.md`, and `development.md` describe the current repository.
+- `installation.md`, `package-managers.md`, `configuration.md`, `development.md`, and `memory.md` describe the current repository.
 - `architecture.md` records current runtime boundaries and invariants.
 - `controller-session.md` records controller prompt loading and the opt-in Claude Code sandbox policy.
 - `completion-audit.md` separates implemented code from environment-dependent live verification.

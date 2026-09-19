@@ -13,7 +13,7 @@ These documents describe work that is not complete in the current repository. Th
 
 | Area | Status | Current capability | Handover |
 | --- | --- | --- | --- |
-| Semantic/vector memory and separate knowledge-base project | Planned | SQLite FTS5/BM25, wiki links, revisioned canonical records | [Semantic memory](semantic-memory.md) |
+| Semantic/vector memory | Planned | Standalone SQLite FTS5/BM25 wiki memory, Markdown interchange, revisioned canonical records | [Semantic memory](semantic-memory.md) |
 | Agent hosts beyond Claude Code, initially Codex | Planned | Claude Code MCP, hooks, plugin, and Claude Agent SDK managed runs | [Additional agent hosts](additional-agent-hosts.md) |
 | Playwright browser backend | Optional adapter | Bounded Claude-in-Chrome Calendar and Slack jobs | [Browser driver](playwright-browser-driver.md) |
 | Release artifacts and cross-platform user services | Productization | Source install and macOS LaunchAgents | [Distribution and services](distribution-and-services.md) |

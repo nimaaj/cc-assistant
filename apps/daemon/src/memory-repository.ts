@@ -9,6 +9,7 @@ import {
   MemoryRecallResultSchema,
   MemoryRevisionSchema,
   MemorySearchHitSchema,
+  MemoryTagSchema,
   UpdateMemorySchema,
   type AssistantEvent,
   type CreateMemoryInput,
@@ -19,6 +20,7 @@ import {
   type MemoryRevision,
   type MemorySearchHit,
   type MemorySummary,
+  type MemoryTag,
   type UpdateMemoryInput,
 } from "@cc-assistant/shared";
 
@@ -26,7 +28,6 @@ type Row = Record<string, unknown>;
 
 export class MemoryNotFoundError extends Error {}
 export class MemoryRevisionConflictError extends Error {}
-export class MemorySlugConflictError extends Error {}
 
 export interface MemoryFilters {
   status?: "active" | "archived" | undefined;
@@ -62,6 +63,7 @@ function mapMemory(row: Row): MemoryRecord {
     provenance: {
       sourceType: row.source_type ?? "manual",
       sourceUri: row.source_uri ?? null,
+      sourceRef: row.source_ref ?? null,
       capturedAt: row.captured_at ?? row.created_at,
     },
     createdAt: row.created_at,
@@ -120,7 +122,7 @@ export class MemoryRepository implements MemorySearchProvider {
         id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, title TEXT NOT NULL, body TEXT NOT NULL,
         summary TEXT, kind TEXT NOT NULL DEFAULT 'note', tags_json TEXT NOT NULL DEFAULT '[]',
         aliases_json TEXT NOT NULL DEFAULT '[]', project TEXT, status TEXT NOT NULL DEFAULT 'active',
-        source_type TEXT NOT NULL DEFAULT 'manual', source_uri TEXT, captured_at TEXT NOT NULL,
+        source_type TEXT NOT NULL DEFAULT 'manual', source_uri TEXT, source_ref TEXT, captured_at TEXT NOT NULL,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
       );
       CREATE TABLE IF NOT EXISTS memory_links (
@@ -143,7 +145,7 @@ export class MemoryRepository implements MemorySearchProvider {
       ["summary", "TEXT"], ["kind", "TEXT NOT NULL DEFAULT 'note'"],
       ["aliases_json", "TEXT NOT NULL DEFAULT '[]'"], ["project", "TEXT"],
       ["status", "TEXT NOT NULL DEFAULT 'active'"], ["source_type", "TEXT NOT NULL DEFAULT 'manual'"],
-      ["source_uri", "TEXT"], ["captured_at", "TEXT"],
+      ["source_uri", "TEXT"], ["source_ref", "TEXT"], ["captured_at", "TEXT"],
     ];
     for (const [name, definition] of additions) if (!columns.has(name)) this.#db.exec(`ALTER TABLE memories ADD COLUMN ${name} ${definition}`);
     this.#db.exec("UPDATE memories SET captured_at=created_at WHERE captured_at IS NULL");
@@ -177,15 +179,17 @@ export class MemoryRepository implements MemorySearchProvider {
       id: randomUUID(), slug, title: input.title, body: input.body,
       summary: input.summary ?? null, kind: input.kind, tags: normalized(input.tags),
       aliases: normalized(input.aliases), project: input.project ?? null, status: "active",
-      provenance: { sourceType: input.sourceType, sourceUri: input.sourceUri ?? null, capturedAt: input.capturedAt ?? now },
+      provenance: { sourceType: input.sourceType, sourceUri: input.sourceUri ?? null,
+        sourceRef: input.sourceRef ?? null, capturedAt: input.capturedAt ?? now },
       createdAt: now, updatedAt: now, revision: 1,
     });
     this.#transaction(() => {
       this.#db.prepare(`INSERT INTO memories (id,slug,title,body,summary,kind,tags_json,aliases_json,project,status,
-        source_type,source_uri,captured_at,created_at,updated_at,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        source_type,source_uri,source_ref,captured_at,created_at,updated_at,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(memory.id, memory.slug, memory.title, memory.body, memory.summary, memory.kind,
           JSON.stringify(memory.tags), JSON.stringify(memory.aliases), memory.project, memory.status,
-          memory.provenance.sourceType, memory.provenance.sourceUri, memory.provenance.capturedAt,
+          memory.provenance.sourceType, memory.provenance.sourceUri, memory.provenance.sourceRef,
+          memory.provenance.capturedAt,
           memory.createdAt, memory.updatedAt, memory.revision);
       this.#index(memory);
       this.#syncLinks(memory);
@@ -214,14 +218,25 @@ export class MemoryRepository implements MemorySearchProvider {
     return (this.#db.prepare(`SELECT * FROM memories${where} ORDER BY updated_at DESC, slug ASC LIMIT ? OFFSET ?`).all(...values) as Row[]).map(mapMemory);
   }
 
+  listTags(includeArchived = false): MemoryTag[] {
+    const statusClause = includeArchived ? "" : "AND m.status='active'";
+    return (this.#db.prepare(`SELECT lower(trim(j.value)) AS tag, count(*) AS count
+      FROM memories m, json_each(m.tags_json) j WHERE trim(j.value) <> '' ${statusClause}
+      GROUP BY lower(trim(j.value)) ORDER BY count DESC, tag COLLATE NOCASE`).all() as Row[])
+      .map((row) => MemoryTagSchema.parse(row));
+  }
+
+  exportAll(includeArchived = false): MemoryRecord[] {
+    const where = includeArchived ? "" : "WHERE status='active'";
+    return (this.#db.prepare(`SELECT * FROM memories ${where} ORDER BY slug COLLATE NOCASE`).all() as Row[])
+      .map(mapMemory);
+  }
+
   update(idOrSlug: string, rawInput: UpdateMemoryInput, source = "web"): MemoryRecord {
     const input = UpdateMemorySchema.parse(rawInput);
     const current = this.get(idOrSlug);
     if (!current) throw new MemoryNotFoundError(`Memory ${idOrSlug} was not found`);
     if (input.expectedRevision !== current.revision) throw new MemoryRevisionConflictError(`Expected revision ${input.expectedRevision}, found ${current.revision}`);
-    if (input.slug && input.slug !== current.slug && this.#db.prepare("SELECT 1 FROM memories WHERE slug=?").get(input.slug)) {
-      throw new MemorySlugConflictError(`Memory slug ${input.slug} is already in use`);
-    }
     const updated = MemoryRecordSchema.parse({
       ...current,
       ...input,
@@ -230,16 +245,18 @@ export class MemoryRepository implements MemorySearchProvider {
       provenance: {
         sourceType: input.sourceType ?? current.provenance.sourceType,
         sourceUri: input.sourceUri !== undefined ? input.sourceUri : current.provenance.sourceUri,
+        sourceRef: input.sourceRef !== undefined ? input.sourceRef : current.provenance.sourceRef,
         capturedAt: input.capturedAt ?? current.provenance.capturedAt,
       },
       updatedAt: new Date().toISOString(), revision: current.revision + 1,
     });
     this.#transaction(() => {
       this.#db.prepare(`UPDATE memories SET slug=?,title=?,body=?,summary=?,kind=?,tags_json=?,aliases_json=?,
-        project=?,source_type=?,source_uri=?,captured_at=?,updated_at=?,revision=? WHERE id=?`)
+        project=?,status=?,source_type=?,source_uri=?,source_ref=?,captured_at=?,updated_at=?,revision=? WHERE id=?`)
         .run(updated.slug, updated.title, updated.body, updated.summary, updated.kind,
           JSON.stringify(updated.tags), JSON.stringify(updated.aliases), updated.project,
-          updated.provenance.sourceType, updated.provenance.sourceUri, updated.provenance.capturedAt,
+          updated.status, updated.provenance.sourceType, updated.provenance.sourceUri, updated.provenance.sourceRef,
+          updated.provenance.capturedAt,
           updated.updatedAt, updated.revision, updated.id);
       this.#db.prepare("DELETE FROM memories_fts WHERE memory_id=?").run(updated.id);
       this.#index(updated);

@@ -26,6 +26,16 @@ Managed Agent SDK runs remain a third category. They are owned by cc-assistant a
 
 The remove operation deliberately exposes no force or discard flags. If Claude Code refuses removal because a worktree contains changes, inspect and preserve the work manually.
 
+Dispatch accepts `manual`, `auto`, or `bypassPermissions` and passes the selected value to Claude
+Code's `--permission-mode` flag. Manual is the default. Bypass mode is intentionally conspicuous in
+the dashboard and should be used only when the target working directory and execution environment
+are independently isolated. The mode changes the spawned Claude session's own permission behavior;
+it does not skip the cc-assistant approval required to dispatch it.
+
+The dedicated main controller uses the same native mechanism. Start it with `pnpm controller:bg`,
+then run `claude attach <short-id>` for a full interactive Claude Code terminal. cc-assistant does
+not emulate that terminal or inject keystrokes.
+
 ## Message delivery
 
 The daemon does not know or reproduce Claude's private inbox protocol. For each approved message it starts a short, non-interactive delivery session whose only allowed tools are `ListAgents` and `SendMessage`. The delivery prompt contains:
@@ -67,7 +77,7 @@ A controller should list immediately before control, use IDs when names are ambi
 pnpm cca claude-session list [--active] [--json]
 pnpm cca claude-session logs <id-or-name>
 pnpm cca claude-session message <id-or-name> <message>
-pnpm cca claude-session dispatch <prompt> --cwd <path> [--name <name>]
+pnpm cca claude-session dispatch <prompt> --cwd <path> [--name <name>] [--permission-mode manual|auto|bypassPermissions]
 pnpm cca claude-session continue <id-or-name> <prompt>
 pnpm cca claude-session stop|respawn|remove <id-or-name>
 ```

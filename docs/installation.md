@@ -8,8 +8,8 @@ There are two supported ways to run the source checkout:
 
 | Mode | Commands | Dashboard | Intended use |
 | --- | --- | --- | --- |
-| Development | `pnpm dev` | `http://127.0.0.1:4318` | Code changes and hot reload |
-| Production-style | `pnpm build`, then `pnpm start` | `http://127.0.0.1:4317` | Daily use from a stable checkout |
+| Development | `pnpm dev` or `npm run dev` | `http://127.0.0.1:4318` | Code changes and hot reload |
+| Production-style | Build, then start | `http://127.0.0.1:4317` | Daily use from a stable checkout |
 
 Both modes use the same daemon API at `http://127.0.0.1:4317` and, when started through the repository scripts, the same `.data` directory.
 
@@ -19,7 +19,7 @@ Required:
 
 - Git.
 - Node.js 24. The repository accepts Node versions `>=24 <27`.
-- pnpm 11.19.0, matching the `packageManager` field in `package.json`.
+- pnpm 11.19.0 (recommended), or npm 11 or newer.
 - Claude Code 2.1.257 or newer, signed in to the intended Claude account. Version 2.1.275 or
   newer is recommended for the documented strict controller sandbox settings.
 
@@ -42,12 +42,16 @@ npm --version
 claude --version
 ```
 
-Install the pinned pnpm version with npm if it is not already available:
+If you choose pnpm, install the pinned version with npm when it is not already available:
 
 ```bash
 npm install --global pnpm@11.19.0
 pnpm --version
 ```
+
+npm ships with Node.js, so no second package manager is required for the npm path. Pick one
+manager per checkout; do not mix their `node_modules` layouts. The complete command mapping and
+lockfile policy are in [Package managers](package-managers.md).
 
 ## 3. Clone and build
 
@@ -60,12 +64,30 @@ pnpm plugin:build
 pnpm assistant:doctor --offline
 ```
 
+Equivalent npm setup:
+
+```bash
+git clone https://github.com/nimaaj/cc-assistant.git
+cd cc-assistant
+npm ci
+npm run build
+npm run plugin:build
+npm run assistant:doctor -- --offline
+```
+
 What these commands do:
 
 - `pnpm install --frozen-lockfile` installs exactly the dependency graph recorded in `pnpm-lock.yaml`.
 - `pnpm build` builds the TypeScript packages and production web assets.
 - `pnpm plugin:build` refreshes the bundled MCP server in `claude-plugin/server/index.mjs`.
 - `pnpm assistant:doctor --offline` checks runtimes and build artifacts without requiring a running daemon.
+
+The npm commands perform the same repository scripts. `npm ci` installs the exact dependency
+graph in `package-lock.json` and refuses to rewrite it.
+
+The remaining examples use pnpm for brevity. If you selected npm, use the corresponding command
+from [Package managers](package-managers.md); npm scripts that receive options need the documented
+`--` separator.
 
 The offline doctor may report warnings for optional platform helpers. It should not report missing build artifacts, an unsupported Node version, or an unusable Claude Code installation.
 
@@ -143,6 +165,20 @@ The project includes a detailed controller prompt and launch commands. With the 
 pnpm controller
 ```
 
+To keep the controller running as a native Claude Code background session and attach to its real
+interactive terminal later:
+
+```bash
+pnpm controller:bg
+# copy the short ID printed by Claude Code
+claude attach <id>
+```
+
+The default is manual permission handling. `pnpm controller:bg:auto` selects Claude Code's
+automatic mode, while `pnpm controller:bg:bypass` selects `bypassPermissions`. Bypass mode removes
+Claude's permission prompts and is appropriate only inside a separately isolated environment; it
+does not bypass cc-assistant's own durable approval ledger.
+
 For strict built-in Bash sandboxing:
 
 ```bash
@@ -156,8 +192,9 @@ without isolation. On Linux and WSL2, install `bubblewrap` and `socat` first:
 sudo apt-get install bubblewrap socat
 ```
 
-See [Claude Code controller session](controller-session.md) for settings, verification, and the
-distinction between Claude Code's Bash sandbox and cc-assistant's durable approval ledger.
+See [Claude Code controller session](controller-session.md) for background attachment, permission
+profiles, settings, verification, and the distinction between Claude Code's Bash sandbox and
+cc-assistant's durable approval ledger.
 
 ### Verify session orchestration
 

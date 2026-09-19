@@ -6,6 +6,7 @@ import {
   type BrowserAutomationStatus,
   type BrowserJob,
   type ClaudeAgentSession,
+  type ClaudePermissionMode,
   type ClaudeSession,
   type Memory,
   type MemoryLink,
@@ -46,6 +47,7 @@ import {
   markNotificationRead,
   proposeCommand,
   readClipboardImage,
+  rawApiRequest,
   resolveApproval,
   searchMemories,
   startAgent,
@@ -272,6 +274,7 @@ function ClaudeSessionControlPanel({ sessions, defaultCwd, onChange }: {
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [prompt, setPrompt] = useState("");
   const [name, setName] = useState("");
+  const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>("manual");
   const [busy, setBusy] = useState<string>();
   const propose = async (key: string, input: Parameters<typeof controlClaudeSession>[0]): Promise<void> => {
     setBusy(key);
@@ -281,12 +284,25 @@ function ClaudeSessionControlPanel({ sessions, defaultCwd, onChange }: {
     <div className="section-heading"><div><p className="eyebrow">Orchestration</p><h2>Claude sessions</h2></div><span>{sessions.filter((session) => session.pid).length} running</span></div>
     <form className="session-dispatch" onSubmit={(event) => {
       event.preventDefault();
-      if (prompt.trim()) void propose("dispatch", { action: "dispatch", cwd: defaultCwd, prompt, ...(name.trim() ? { name } : {}) }).then(() => { setPrompt(""); setName(""); });
+      if (prompt.trim()) void propose("dispatch", { action: "dispatch", cwd: defaultCwd, prompt, permissionMode, ...(name.trim() ? { name } : {}) }).then(() => { setPrompt(""); setName(""); });
     }}>
       <input aria-label="Session name" placeholder="Optional session name" value={name} onChange={(event) => setName(event.target.value)} />
       <input aria-label="Session task" placeholder="Dispatch a background task…" value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+      <select aria-label="Claude permission mode" value={permissionMode} onChange={(event) => setPermissionMode(event.target.value as ClaudePermissionMode)}>
+        <option value="manual">Manual permissions</option>
+        <option value="auto">Automatic mode</option>
+        <option value="bypassPermissions">Bypass permissions</option>
+      </select>
       <button className="primary" disabled={busy === "dispatch" || !prompt.trim()}>Propose dispatch</button>
     </form>
+    <div className="controller-quickstart">
+      <span>Start the main controller as an attachable terminal session.</span>
+      <button disabled={busy === "main-controller" || !defaultCwd} onClick={() => void propose("main-controller", {
+        action: "dispatch", cwd: defaultCwd, name: "cc-assistant-controller", permissionMode,
+        prompt: "Enter cc-assistant controller mode, load durable state read-only, summarize current focus, and wait for direction.",
+      })}>Propose main controller</button>
+    </div>
+    {permissionMode === "bypassPermissions" ? <p className="permission-warning">Bypass mode removes Claude Code permission prompts. Use it only inside an environment you independently trust and isolate.</p> : null}
     <div className="session-list">
       {sessions.map((session) => {
         const target = session.id ?? session.sessionId ?? session.name ?? "";
@@ -295,6 +311,7 @@ function ClaudeSessionControlPanel({ sessions, defaultCwd, onChange }: {
           <div className="session-title"><i className={`session-dot ${session.status ?? session.state ?? "ended"}`} /><strong>{session.name ?? session.id ?? "Unnamed"}</strong><span className={`session-status ${session.status ?? session.state ?? "ended"}`}>{session.status ?? session.state ?? "saved"}</span></div>
           <p>{session.kind} · {session.waitingFor ?? session.state ?? "unknown"}</p>
           <div className="session-meta"><span>{session.cwd.split("/").filter(Boolean).at(-1) ?? session.cwd}</span><span>{session.id ?? "interactive"}</span></div>
+          {session.kind === "background" && session.id ? <code className="attach-command">claude attach {session.id}</code> : null}
           {session.pid && session.name ? <div className="session-message"><input aria-label={`Message ${session.name}`} placeholder="Message this session…" value={messages[key] ?? ""} onChange={(event) => setMessages({ ...messages, [key]: event.target.value })} /><button disabled={!messages[key]?.trim() || busy === key} onClick={() => void propose(key, { action: "message", target, message: messages[key]! }).then(() => setMessages({ ...messages, [key]: "" }))}>Propose message</button></div> : null}
           {session.kind === "background" && session.id ? <div className="session-actions"><button disabled={busy === key} onClick={() => void propose(key, { action: "stop", target })}>Stop</button><button disabled={busy === key} onClick={() => void propose(key, { action: "respawn", target })}>Respawn</button><button className="danger" disabled={busy === key} onClick={() => void propose(key, { action: "remove", target })}>Remove</button></div> : null}
         </article>;
@@ -358,7 +375,7 @@ function ExecutionPanel({
             ) : null}
           </article>
         ))}
-        {runs.length === 0 ? <div className="session-empty">No managed runs yet. Start one from Claude through MCP or with <code>pnpm cca run</code>.</div> : null}
+        {runs.length === 0 ? <div className="session-empty">No managed runs yet. Start one from Claude through MCP or with the <code>cca run</code> developer CLI.</div> : null}
       </div>
     </section>
   );
@@ -701,12 +718,61 @@ function MemoryWorkspace({ memories, onChange }: { memories: Memory[]; onChange:
           <div className="memory-title"><div><h3>{selected.title}</h3><p>{selected.slug} · {selected.kind} · revision {selected.revision}</p></div><div><button onClick={beginEdit}>Edit</button><button onClick={() => void archive()}>Archive</button></div></div>
           {selected.summary ? <p className="memory-summary">{selected.summary}</p> : null}
           <pre>{selected.body}</pre>
-          <div className="memory-metadata"><span>Project: {selected.project ?? "none"}</span><span>Tags: {selected.tags.join(", ") || "none"}</span><span>Aliases: {selected.aliases.join(", ") || "none"}</span><span>Source: {selected.provenance.sourceType}{selected.provenance.sourceUri ? ` · ${selected.provenance.sourceUri}` : ""}</span><span>Captured: {new Date(selected.provenance.capturedAt).toLocaleString()}</span></div>
+          <div className="memory-metadata"><span>Project: {selected.project ?? "none"}</span><span>Tags: {selected.tags.join(", ") || "none"}</span><span>Aliases: {selected.aliases.join(", ") || "none"}</span><span>Source: {selected.provenance.sourceType}{selected.provenance.sourceUri ? ` · ${selected.provenance.sourceUri}` : ""}{selected.provenance.sourceRef ? ` · ${selected.provenance.sourceRef}` : ""}</span><span>Captured: {new Date(selected.provenance.capturedAt).toLocaleString()}</span></div>
           <div className="memory-links"><div><strong>Links</strong>{links.outgoing.map((link) => link.resolved && link.recordId ? <button key={`${link.slug}-${link.label}`} onClick={() => void open(link.recordId!)}>{link.label ?? link.title ?? link.slug}</button> : <span key={`${link.slug}-${link.label}`}>{link.label ?? link.slug} (unresolved)</span>)}</div><div><strong>Backlinks</strong>{links.backlinks.map((link) => <button key={link.slug} onClick={() => void open(link.recordId!)}>{link.title ?? link.slug}</button>)}</div></div>
         </>}
       </article>
     </div>
   </section>;
+}
+
+function StateStudio({ snapshot, onChange }: { snapshot: Record<string, unknown>; onChange: () => void }): React.JSX.Element {
+  const [method, setMethod] = useState<"GET" | "POST" | "PATCH" | "DELETE">("GET");
+  const [path, setPath] = useState("/api/tasks");
+  const [body, setBody] = useState("{}");
+  const [result, setResult] = useState<unknown>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  const execute = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    setBusy(true); setError(undefined);
+    try {
+      if (!path.startsWith("/api/")) throw new Error("State requests must target an /api/ path");
+      const init: RequestInit = { method };
+      if (method !== "GET" && method !== "DELETE") init.body = JSON.stringify(JSON.parse(body) as unknown);
+      setResult(await rawApiRequest(path, init));
+      if (method !== "GET") onChange();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "State request failed");
+    } finally { setBusy(false); }
+  };
+
+  return <details className="state-studio">
+    <summary><span><strong>Developer state studio</strong><small>Inspect the current snapshot and call validated daemon APIs directly</small></span></summary>
+    <div className="state-studio-grid">
+      <section>
+        <h3>Current state</h3>
+        <pre>{JSON.stringify(snapshot, null, 2)}</pre>
+      </section>
+      <section>
+        <h3>API editor</h3>
+        <p>Writes still pass schema validation, optimistic revisions, audit events, and live updates. They never edit SQLite directly.</p>
+        <form onSubmit={(event) => void execute(event)}>
+          <div className="state-request-line">
+            <select aria-label="State request method" value={method} onChange={(event) => setMethod(event.target.value as typeof method)}>
+              <option>GET</option><option>POST</option><option>PATCH</option><option>DELETE</option>
+            </select>
+            <input aria-label="State API path" value={path} onChange={(event) => setPath(event.target.value)} />
+          </div>
+          {method !== "GET" && method !== "DELETE" ? <textarea className="json-input" aria-label="State request JSON" value={body} onChange={(event) => setBody(event.target.value)} /> : null}
+          <button className="primary" disabled={busy || !path.startsWith("/api/")}>{busy ? "Running…" : "Execute request"}</button>
+        </form>
+        {error ? <p className="error banner">{error}</p> : null}
+        {result !== undefined ? <pre>{JSON.stringify(result, null, 2)}</pre> : null}
+      </section>
+    </div>
+  </details>;
 }
 
 export default function App(): React.JSX.Element {
@@ -821,6 +887,11 @@ export default function App(): React.JSX.Element {
       <ClaudeSessionControlPanel sessions={claudeAgentSessions} defaultCwd={defaultCwd} onChange={() => void refresh()} />
       <SessionStrip sessions={sessions} />
       <ExecutionPanel runs={runs} approvals={approvals} onChange={() => void refresh()} />
+
+      <StateStudio snapshot={{
+        tasks, observedSessions: sessions, claudeSessions: claudeAgentSessions, runs, approvals,
+        notifications, schedules, memories, abilities, browserJobs, browserStatus,
+      }} onChange={() => void refresh()} />
 
       <section className="summary">
         <div><strong>{grouped.active.length}</strong><span>in focus</span></div>

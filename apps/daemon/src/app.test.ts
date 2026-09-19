@@ -275,6 +275,32 @@ describe("daemon API", () => {
       method: "GET", url: `/api/memories/${memoryId}/revisions`, headers: { cookie: cookie as string },
     });
     expect(revisions.json().revisions).toHaveLength(1);
+    const tags = await app.inject({
+      method: "GET", url: "/api/memories/tags", headers: { cookie: cookie as string },
+    });
+    expect(tags.json().tags).toEqual([{ tag: "test", count: 1 }]);
+    const exported = await app.inject({
+      method: "GET", url: "/api/memories/export", headers: { cookie: cookie as string },
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json().files[0]).toMatchObject({ path: "memories/api-memory.md" });
+    const preview = await app.inject({
+      method: "POST", url: "/api/memories/import/preview", headers: { cookie: cookie as string },
+      payload: { files: exported.json().files },
+    });
+    expect(preview.json().summary).toMatchObject({ unchanged: 1, conflict: 0, invalid: 0 });
+    const changedFiles = exported.json().files.map((file: { path: string; content: string }) => ({
+      ...file, content: file.content.replace("Links to [[Missing Page]].", "Updated through Markdown import."),
+    }));
+    const appliedImport = await app.inject({
+      method: "POST", url: "/api/memories/import", headers: { cookie: cookie as string },
+      payload: { files: changedFiles },
+    });
+    expect(appliedImport.statusCode).toBe(200);
+    expect(appliedImport.json().plan.summary).toMatchObject({ update: 1, conflict: 0, invalid: 0 });
+    expect(appliedImport.json().memories[0]).toMatchObject({
+      id: memoryId, revision: 2, body: "Updated through Markdown import.",
+    });
     const missingMemory = await app.inject({
       method: "GET", url: "/api/memories/does-not-exist", headers: { cookie: cookie as string },
     });

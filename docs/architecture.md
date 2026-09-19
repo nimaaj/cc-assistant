@@ -6,7 +6,8 @@ The system is split into five process boundaries:
 
 1. The daemon owns durable state, scheduling, approvals, managed execution, and integration lifecycles.
 2. The MCP bridge is spawned by Claude Code over stdio and forwards typed requests to the daemon.
-3. The browser dashboard reads and changes the same state through the daemon API.
+3. The browser dashboard reads and changes the same state through the daemon API, including its
+   developer-facing aggregate snapshot and raw validated API console.
 4. The developer CLI provides human-readable and JSON state control through that API.
 5. A bounded Agent SDK worker delegates browser-only jobs to Claude Code's official Claude-in-Chrome integration; an optional macOS watcher handles notification triggers.
 
@@ -50,7 +51,11 @@ Schedules store their next fire time in SQLite. One-time triggers disable after 
 
 ## Memory data ownership
 
-`MemoryRepository` is the sole writer for wiki memory state. A create/update transaction changes the canonical record, FTS row, extracted `[[wiki links]]`, and immutable revision snapshot together; the event is appended after the transaction commits. Archived pages leave history and graph edges intact but leave the default list and FTS index.
+`MemoryRepository` is the sole writer for wiki memory state. A create/update transaction changes the canonical record, FTS row, extracted `[[wiki links]]`, and immutable revision snapshot together; the event is appended after the transaction commits. Archived pages leave history, graph edges, and an explicitly searchable FTS row intact but are omitted by default.
+
+Deterministic Markdown export/import is an interchange boundary, not a second source of truth.
+Import always validates and plans against the daemon's current revisions before applying through the
+repository. The incorporated knowledge-base code has no runtime dependency on a separate checkout.
 
 Lexical search is isolated behind `MemorySearchProvider`. The current provider safely tokenizes arbitrary user text, uses FTS5/BM25, then applies deterministic exact-title/alias and filter boosts. Recall consumes that contract and enforces record and character limits. A future semantic/vector provider can implement the same contract without changing HTTP, MCP, or CLI shapes.
 

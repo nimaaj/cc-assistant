@@ -6,7 +6,11 @@
 
 Add privacy-conscious semantic retrieval without replacing the current canonical memory records, revision history, wiki graph, filters, or deterministic context limits.
 
-The separate `cc-knowledge-base` checkout is not currently a package, submodule, service dependency, or data source for cc-assistant. Treat it as design/prototype material until an explicit integration contract is chosen. Do not create two writable authorities for the same memory.
+The reusable lexical/wiki functionality from the former `cc-knowledge-base` prototype is now
+incorporated directly: source references, tag inventory, deterministic Markdown export/import with
+dry-run conflict planning, operating documentation, and its flowchart. This repository has no
+runtime, package, submodule, or installation dependency on the separate checkout. Do not create two
+writable authorities for the same memory.
 
 ## Current implementation
 
@@ -150,19 +154,22 @@ Preserve existing search and recall routes. Add only what operations need:
 
 A reindex is a potentially expensive operation but not an external side effect. It should require confirmation in the UI when replacing a large index, not the command/browser approval model.
 
-## Migration from the separate knowledge-base project
+## Migration of legacy knowledge-base content
 
 Do not copy its SQLite database into cc-assistant blindly.
 
-1. inventory its canonical records and fields;
-2. define a versioned export format using stable IDs, Markdown, metadata, provenance, and timestamps;
-3. write a dry-run importer that reports collisions and unsupported fields;
-4. ingest through the daemon API so normalization, history, links, events, and live UI updates remain intact;
-5. preserve original source references in provenance;
-6. verify counts, slugs, links, and sampled bodies;
-7. make one system authoritative before enabling ongoing writes.
+The versioned Markdown format and dry-run importer are implemented. For any content that still
+exists only in a legacy checkout:
 
-If the separate project becomes a semantic sidecar instead, it must never mutate cc-assistant's canonical database directly.
+1. export selected canonical records as Markdown with metadata and provenance;
+2. run `cca memory import <path>` and resolve every invalid or conflict entry;
+3. apply with `cca memory import <path> --apply` so normalization, history, links, events, and live
+   UI updates remain intact;
+4. verify counts, slugs, links, source references, and sampled bodies;
+5. stop writes to the legacy store before treating cc-assistant as authoritative.
+
+Never copy the legacy SQLite database over `.data/assistant.sqlite`. A future semantic sidecar, if
+one is chosen, must never mutate cc-assistant's canonical database directly.
 
 ## Test matrix
 

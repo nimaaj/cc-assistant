@@ -4,19 +4,26 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.19.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=24 <27"
   },
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "node scripts/run-workspaces.mjs build",
     "assistant:doctor": "node scripts/doctor.mjs",
     "controller": "node scripts/start-controller.mjs",
+    "controller:bg": "node scripts/start-controller.mjs --background",
+    "controller:bg:auto": "node scripts/start-controller.mjs --background --permission-mode auto",
+    "controller:bg:bypass": "node scripts/start-controller.mjs --background --permission-mode bypassPermissions",
     "controller:sandbox": "node scripts/start-controller.mjs --sandbox",
     "cca": "node apps/cli/dist/index.js",
-    "dev": "pnpm --parallel --filter @cc-assistant/daemon --filter @cc-assistant/web dev",
-    "dev:daemon": "pnpm --filter @cc-assistant/daemon dev",
-    "dev:web": "pnpm --filter @cc-assistant/web dev",
-    "start": "pnpm --filter @cc-assistant/daemon start",
+    "dev": "node scripts/run-workspaces.mjs dev",
+    "dev:daemon": "node scripts/run-workspaces.mjs dev:daemon",
+    "dev:web": "node scripts/run-workspaces.mjs dev:web",
+    "start": "node scripts/run-workspaces.mjs start",
     "smoke:mcp": "node scripts/mcp-smoke.mjs",
     "smoke:browser:e2e": "node scripts/browser-live-e2e.mjs",
     "native:watch-notifications": "swift native/macos/notification-watcher.swift --daemon http://127.0.0.1:4317 --token-file .data/access-token",
@@ -27,8 +34,8 @@
     "plugin:validate": "claude plugin validate ./claude-plugin --strict",
     "hooks:install-global": "node scripts/install-global-claude-hooks.mjs",
     "hooks:remove-global": "node scripts/install-global-claude-hooks.mjs --remove",
-    "test": "pnpm --filter @cc-assistant/shared build && pnpm --filter @cc-assistant/client build && pnpm -r test",
-    "typecheck": "pnpm --filter @cc-assistant/shared build && pnpm --filter @cc-assistant/client build && pnpm -r typecheck"
+    "test": "node scripts/run-workspaces.mjs test",
+    "typecheck": "node scripts/run-workspaces.mjs typecheck"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

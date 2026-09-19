@@ -76,6 +76,36 @@ state snapshot:
 node scripts/start-controller.mjs --no-bootstrap
 ```
 
+### Background terminal session and permission modes
+
+The launcher can ask Claude Code to create a real named background session. Claude prints a short
+ID; `claude attach` then opens Claude Code's own interactive terminal for that same session:
+
+```bash
+pnpm controller:bg
+claude attach <id>
+```
+
+Choose a permission mode explicitly when the default manual prompts are not appropriate:
+
+| cc-assistant profile | Claude Code value | Behavior |
+| --- | --- | --- |
+| Manual | `manual` | Prompts according to the normal permission rules; this is the default. |
+| Automatic | `auto` | Claude Code automatically decides which tool uses can proceed under its active policy. |
+| Bypass | `bypassPermissions` | Removes Claude Code permission prompts; use only inside a separately isolated environment. |
+
+```bash
+pnpm controller:bg:auto
+pnpm controller:bg:bypass
+node scripts/start-controller.mjs --background --permission-mode manual
+```
+
+These values are forwarded to Claude Code's documented `--permission-mode` option. They do not
+disable cc-assistant's durable approval queue for cross-session control, commands, browser writes,
+or ability invocations. In particular, bypass mode does not authorize the controller to approve its
+own cc-assistant proposals. Prefer `controller:sandbox` plus a narrow policy for unattended work;
+bypass mode alone is not a sandbox.
+
 For a plugin session launched from a different project:
 
 ```bash
@@ -123,7 +153,7 @@ Official references:
 - [Configure the sandboxed Bash tool](https://code.claude.com/docs/en/sandboxing)
 - [Configure permissions](https://code.claude.com/docs/en/permissions)
 - [Settings files and precedence](https://code.claude.com/docs/en/settings)
-- [CLI reference for `--settings`](https://code.claude.com/docs/en/cli-reference)
+- [CLI reference for `--settings`, `--permission-mode`, `--bg`, and `attach`](https://code.claude.com/docs/en/cli-reference)
 
 ### Linux dependencies
 

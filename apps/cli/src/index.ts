@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, relative, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { DaemonClient } from "@cc-assistant/client";
 import {
   ApprovalListSchema,
   ClaudeAgentSessionListSchema,
   ClaudeSessionListSchema,
+  MemoryMarkdownExportSchema,
   RunListSchema,
   RunSchema,
   TaskListSchema,
@@ -24,13 +25,7 @@ const jsonIndex = rawArgs.indexOf("--json");
 const jsonOutput = jsonIndex !== -1;
 if (jsonIndex !== -1) rawArgs.splice(jsonIndex, 1);
 
-const client = new DaemonClient({
-  source: "cli",
-  // This CLI ships with the project and its documented development daemon uses
-  // the repository-local data directory. Explicit environment configuration
-  // still wins for installed/service deployments.
-  dataDir: process.env.CC_ASSISTANT_DATA_DIR ?? resolve(import.meta.dirname, "../../..", ".data"),
-});
+let client: DaemonClient;
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -77,69 +72,75 @@ function printClaudeAgentSessions(sessions: ClaudeAgentSession[]): void {
 function help(): never {
   console.log(`cc-assistant developer CLI
 
+Invoke as \`pnpm cca ...\` or \`npm run cca -- ...\` from this repository.
+
 Usage:
-  pnpm cca status [--json]
-  pnpm cca task list [--status <status>] [--json]
-  pnpm cca task get <id> [--json]
-  pnpm cca task create <title> [--project <name>] [--description <text>]
+  cca status [--json]
+  cca task list [--status <status>] [--json]
+  cca task get <id> [--json]
+  cca task create <title> [--project <name>] [--description <text>]
                        [--status <status>] [--priority <0-4>] [--due <ISO time>]
-  pnpm cca task update <id> [--title <title>] [--description <text>]
+  cca task update <id> [--title <title>] [--description <text>]
                        [--project <name> | --clear-project] [--status <status>]
                        [--priority <0-4>] [--due <ISO time> | --clear-due]
                        [--revision <number>]
-  pnpm cca task focus <id> [--revision <number>]
-  pnpm cca task complete <id> [--revision <number>]
-  pnpm cca session list [--all] [--json]
-  pnpm cca session get <id> [--json]
-  pnpm cca claude-session list [--active] [--json]
-  pnpm cca claude-session logs <id-or-name>
-  pnpm cca claude-session message <id-or-name> <message>
-  pnpm cca claude-session dispatch <prompt> --cwd <path> [--name <name>]
+  cca task focus <id> [--revision <number>]
+  cca task complete <id> [--revision <number>]
+  cca session list [--all] [--json]
+  cca session get <id> [--json]
+  cca claude-session list [--active] [--json]
+  cca claude-session logs <id-or-name>
+  cca claude-session message <id-or-name> <message>
+  cca claude-session dispatch <prompt> --cwd <path> [--name <name>]
                                   [--model <model>] [--effort <level>]
                                   [--permission-mode <mode>]
-  pnpm cca claude-session continue <id-or-name> <prompt>
-  pnpm cca claude-session stop|respawn|remove <id-or-name>
-  pnpm cca run list [--status <status>] [--json]
-  pnpm cca run get <id> [--json]
-  pnpm cca run logs <id> [--after <sequence>] [--json]
-  pnpm cca run agent <title> --prompt <text> [--cwd <path>] [--model <model>]
+  cca claude-session continue <id-or-name> <prompt>
+  cca claude-session stop|respawn|remove <id-or-name>
+  cca run list [--status <status>] [--json]
+  cca run get <id> [--json]
+  cca run logs <id> [--after <sequence>] [--json]
+  cca run agent <title> --prompt <text> [--cwd <path>] [--model <model>]
                      [--effort <level>] [--max-turns <n>] [--max-budget <usd>]
                      [--task <id>] [--worktree]
-  pnpm cca run command <title> <executable> [args...] [--cwd <path>]
+  cca run command <title> <executable> [args...] [--cwd <path>]
                        [--timeout <ms>] [--task <id>]
-  pnpm cca run cancel <id>
-  pnpm cca approval list [--status <status>] [--json]
-  pnpm cca approval approve <id> [--note <text>]
-  pnpm cca approval deny <id> [--note <text>]
-  pnpm cca memory list [--project <name>] [--kind <kind>] [--tag <tag>] [--all]
-  pnpm cca memory search <query> [--project <name>] [--limit <n>]
-  pnpm cca memory recall <query> [--project <name>] [--limit <n>] [--characters <n>]
-  pnpm cca memory get <id-or-slug> [--json]
-  pnpm cca memory create <title> [--slug <slug>] [--body <text> | --body-file <file> | --stdin]
+  cca run cancel <id>
+  cca approval list [--status <status>] [--json]
+  cca approval approve <id> [--note <text>]
+  cca approval deny <id> [--note <text>]
+  cca memory list [--project <name>] [--kind <kind>] [--tag <tag>] [--all]
+  cca memory search <query> [--project <name>] [--limit <n>] [--all]
+  cca memory recall <query> [--project <name>] [--limit <n>] [--characters <n>] [--all]
+  cca memory get <id-or-slug> [--json]
+  cca memory create <title> [--slug <slug>] [--body <text> | --body-file <file> | --stdin]
                          [--tag <tag>...] [--alias <name>...] [--project <name>] [--kind <kind>]
-  pnpm cca memory update <id-or-slug> --revision <n> [--title <text>]
+  cca memory ingest <title> --source-type <type> [--source-uri <uri>] [--source-ref <ref>]
                          [--body <text> | --body-file <file> | --stdin] [--tag <tag>...]
-  pnpm cca memory archive <id-or-slug> --revision <n>
-  pnpm cca memory revisions|links <id-or-slug>
-  pnpm cca schedule list [--json]
-  pnpm cca schedule create <name> --trigger-kind <kind> --trigger <json>
+  cca memory update <id-or-slug> --revision <n> [--title <text>]
+                         [--body <text> | --body-file <file> | --stdin] [--tag <tag>...]
+  cca memory archive <id-or-slug> --revision <n>
+  cca memory revisions|links <id-or-slug>
+  cca memory export --output <directory> [--all]
+  cca memory import <file-or-directory> [--apply]
+  cca schedule list [--json]
+  cca schedule create <name> --trigger-kind <kind> --trigger <json>
                            --action-kind <kind> --action <json>
-  pnpm cca schedule enable|disable <id> --revision <n>
-  pnpm cca notification list [--all] [--json]
-  pnpm cca notification read <id>
-  pnpm cca ability list [--json]
-  pnpm cca ability install <manifest.json>
-  pnpm cca ability invoke <id> [json-input]
-  pnpm cca browser calendar list [YYYY-MM-DD] [--view day|week|month]
-  pnpm cca browser calendar create <json-input>
-  pnpm cca browser slack unreads
-  pnpm cca browser slack read <channel>
-  pnpm cca browser slack send <channel> <text>
-  pnpm cca native clipboard-image --output <file>
-  pnpm cca native notify <title> [body]
-  pnpm cca event list [--after <id>] [--limit <1-500>] [--json]
-  pnpm cca state export [--json]
-  pnpm cca api <METHOD> </api/path> [json-body] [--json]
+  cca schedule enable|disable <id> --revision <n>
+  cca notification list [--all] [--json]
+  cca notification read <id>
+  cca ability list [--json]
+  cca ability install <manifest.json>
+  cca ability invoke <id> [json-input]
+  cca browser calendar list [YYYY-MM-DD] [--view day|week|month]
+  cca browser calendar create <json-input>
+  cca browser slack unreads
+  cca browser slack read <channel>
+  cca browser slack send <channel> <text>
+  cca native clipboard-image --output <file>
+  cca native notify <title> [body]
+  cca event list [--after <id>] [--limit <1-500>] [--json]
+  cca state export [--json]
+  cca api <METHOD> </api/path> [json-body] [--json]
 
 Configuration:
   CC_ASSISTANT_DATA_DIR   Directory containing access-token
@@ -167,6 +168,25 @@ function statusOption(value: string | undefined): TaskStatus | undefined {
     throw new Error(`status must be one of: ${taskStatuses.join(", ")}`);
   }
   return value as TaskStatus;
+}
+
+function markdownFiles(inputPath: string): Array<{ path: string; content: string }> {
+  const root = resolve(inputPath);
+  if (!statSync(root).isDirectory()) {
+    return [{ path: root.split(sep).at(-1) ?? "memory.md", content: readFileSync(root, "utf8") }];
+  }
+  const files: Array<{ path: string; content: string }> = [];
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = resolve(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile() && entry.name.toLocaleLowerCase().endsWith(".md")) {
+        files.push({ path: relative(root, absolute).split(sep).join("/"), content: readFileSync(absolute, "utf8") });
+      }
+    }
+  };
+  visit(root);
+  return files.sort((left, right) => left.path.localeCompare(right.path));
 }
 
 async function taskCommand(args: string[]): Promise<void> {
@@ -526,17 +546,19 @@ async function memoryCommand(args: string[]): Promise<void> {
     return printJson(await client.request(`/api/memories?${params}`));
   }
   if (action === "search" || action === "recall") {
-    const parsed = parseArgs({ args, allowPositionals: true, options: { project: { type: "string" }, kind: { type: "string" }, tag: { type: "string" }, limit: { type: "string" }, characters: { type: "string" } }, strict: true });
+    const parsed = parseArgs({ args, allowPositionals: true, options: { project: { type: "string" }, kind: { type: "string" }, tag: { type: "string" }, limit: { type: "string" }, characters: { type: "string" }, all: { type: "boolean" } }, strict: true });
     const query = required(parsed.positionals[0], "search query");
     if (action === "search") {
       const params = new URLSearchParams({ q: query, limit: String(numberOption(parsed.values.limit, "limit") ?? 20) });
       if (parsed.values.project) params.set("project", parsed.values.project);
       if (parsed.values.kind) params.set("kind", parsed.values.kind);
       if (parsed.values.tag) params.set("tag", parsed.values.tag);
+      if (parsed.values.all) params.set("includeArchived", "true");
       return printJson(await client.request(`/api/memories/search?${params}`));
     }
     return printJson(await client.request("/api/memories/recall", { method: "POST", body: JSON.stringify({
       query, project: parsed.values.project, kind: parsed.values.kind, tag: parsed.values.tag,
+      includeArchived: parsed.values.all ?? false,
       limit: numberOption(parsed.values.limit, "limit") ?? 5,
       characterLimit: numberOption(parsed.values.characters, "characters") ?? 12_000,
     }) }));
@@ -546,13 +568,15 @@ async function memoryCommand(args: string[]): Promise<void> {
     const [memory, links] = await Promise.all([client.request(`/api/memories/${id}`), client.request(`/api/memories/${id}/links`)]);
     return printJson({ ...(memory as object), links });
   }
-  if (action === "create") {
-    const parsed = parseArgs({ args, allowPositionals: true, options: { slug: { type: "string" }, body: { type: "string" }, "body-file": { type: "string" }, stdin: { type: "boolean" }, tag: { type: "string", multiple: true }, alias: { type: "string", multiple: true }, project: { type: "string" }, kind: { type: "string" }, summary: { type: "string" }, "source-type": { type: "string" }, "source-uri": { type: "string" } }, strict: true });
+  if (action === "create" || action === "ingest") {
+    const parsed = parseArgs({ args, allowPositionals: true, options: { slug: { type: "string" }, body: { type: "string" }, "body-file": { type: "string" }, stdin: { type: "boolean" }, tag: { type: "string", multiple: true }, alias: { type: "string", multiple: true }, project: { type: "string" }, kind: { type: "string" }, summary: { type: "string" }, "source-type": { type: "string" }, "source-uri": { type: "string" }, "source-ref": { type: "string" } }, strict: true });
     const bodyText = parsed.values["body-file"] ? readFileSync(parsed.values["body-file"], "utf8") : parsed.values.stdin ? readFileSync(0, "utf8") : parsed.values.body ?? "";
-    return printJson(await client.request("/api/memories", { method: "POST", body: JSON.stringify({
+    return printJson(await client.request(action === "ingest" ? "/api/memories/ingest" : "/api/memories", { method: "POST", body: JSON.stringify({
       title: required(parsed.positionals[0], "title"), body: bodyText, slug: parsed.values.slug,
       tags: parsed.values.tag ?? [], aliases: parsed.values.alias ?? [], project: parsed.values.project,
-      kind: parsed.values.kind, summary: parsed.values.summary, sourceType: parsed.values["source-type"], sourceUri: parsed.values["source-uri"],
+      kind: parsed.values.kind, summary: parsed.values.summary,
+      sourceType: action === "ingest" ? required(parsed.values["source-type"], "--source-type") : parsed.values["source-type"],
+      sourceUri: parsed.values["source-uri"], sourceRef: parsed.values["source-ref"],
     }) }));
   }
   if (action === "update") {
@@ -575,6 +599,34 @@ async function memoryCommand(args: string[]): Promise<void> {
   if (action === "revisions" || action === "links") {
     const id = encodeURIComponent(required(args[0], "memory ID or slug"));
     return printJson(await client.request(`/api/memories/${id}/${action}`));
+  }
+  if (action === "export") {
+    const parsed = parseArgs({ args, options: { output: { type: "string" }, all: { type: "boolean" } }, strict: true });
+    const outputRoot = resolve(required(parsed.values.output, "--output"));
+    const suffix = parsed.values.all ? "?includeArchived=true" : "";
+    const bundle = MemoryMarkdownExportSchema.parse(await client.request(`/api/memories/export${suffix}`));
+    mkdirSync(outputRoot, { recursive: true });
+    for (const file of bundle.files) {
+      const target = resolve(outputRoot, file.path);
+      const targetRelative = relative(outputRoot, target);
+      if (targetRelative.startsWith("..") || targetRelative === "" || targetRelative.includes(`..${sep}`)) {
+        throw new Error(`Unsafe export path: ${file.path}`);
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.content, "utf8");
+    }
+    writeFileSync(resolve(outputRoot, "manifest.json"), `${JSON.stringify({
+      formatVersion: bundle.formatVersion, exportedAt: bundle.exportedAt,
+      files: bundle.files.map((file) => ({ path: file.path })),
+    }, null, 2)}\n`, "utf8");
+    return printJson({ output: outputRoot, exportedAt: bundle.exportedAt, files: bundle.files.length });
+  }
+  if (action === "import") {
+    const parsed = parseArgs({ args, allowPositionals: true, options: { apply: { type: "boolean" } }, strict: true });
+    const files = markdownFiles(required(parsed.positionals[0], "Markdown file or export directory"));
+    if (files.length === 0) throw new Error("No Markdown files were found");
+    const path = parsed.values.apply ? "/api/memories/import" : "/api/memories/import/preview";
+    return printJson(await client.request(path, { method: "POST", body: JSON.stringify({ files }) }));
   }
   help();
 }
@@ -671,6 +723,13 @@ async function nativeCommand(args: string[]): Promise<void> {
 async function main(): Promise<void> {
   const command = rawArgs.shift();
   if (!command || command === "help" || command === "--help" || command === "-h") help();
+  client = new DaemonClient({
+    source: "cli",
+    // This CLI ships with the project and its documented development daemon uses
+    // the repository-local data directory. Explicit environment configuration
+    // still wins for installed/service deployments.
+    dataDir: process.env.CC_ASSISTANT_DATA_DIR ?? resolve(import.meta.dirname, "../../..", ".data"),
+  });
   if (command === "task") return taskCommand(rawArgs);
   if (command === "session") return sessionCommand(rawArgs);
   if (command === "claude-session") return claudeSessionCommand(rawArgs);

@@ -6,6 +6,9 @@ Claude Code controller settings are separate from daemon environment variables. 
 configuration lives in `.claude/settings.json`; strict opt-in sandbox settings live in
 `.claude/controller-sandbox.settings.json` and are applied only by `pnpm controller:sandbox`
 through Claude Code's `--settings` flag. See [the controller-session guide](controller-session.md).
+Background controller launchers select Claude Code permission modes with CLI arguments rather than
+daemon environment variables; `manual` is the default, with explicit `auto` and
+`bypassPermissions` profiles.
 
 ## Runtime variables
 

@@ -7,8 +7,11 @@ For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md
 ## Documentation
 
 - [Installation](docs/installation.md): fresh clone through daemon, dashboard, Claude Code, browser integrations, platform helpers, verification, update, and removal.
+- [Package managers](docs/package-managers.md): pnpm and npm setup, command equivalents, lockfiles, and switching rules.
 - [Configuration](docs/configuration.md): environment variables, data-directory rules, authentication, and generated state.
 - [Architecture](docs/architecture.md): process boundaries, trust model, persistence, and memory ownership.
+- [Memory and knowledge base](docs/memory.md): wiki records, search, recall, revisions, tags, and Markdown interchange.
+- [Knowledge-base operating playbook](docs/cc-assistant-knowledge-base-playbook.md): safe capture, recall, editing, and migration conventions.
 - [Interactive runtime flow](docs/diagrams/cc-assistant-runtime-flow.html): source-grounded request, approval, automation, persistence, and client-update lifecycle.
 - [Claude controller session](docs/controller-session.md): controller prompt loading, plugin activation, and strict sandbox mode.
 - [Development guide](docs/development.md): package ownership, change workflow, verification, and safety review.
@@ -25,19 +28,19 @@ For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md
 - Managed Claude Agent SDK runs with a 50-turn and $2 default ceiling, optional caller-supplied limits, git worktrees, streamed logs, cancellation, and tool approvals.
 - Local commands executed as executable/argument arrays without a shell and only after explicit approval.
 - One-shot, interval, and macOS-notification-triggered automations plus a durable reminder inbox.
-- Full-text wiki memory ingest, recall, search, and revision-safe editing.
+- Standalone full-text wiki memory ingest, recall, search, tags, revision-safe editing, and Markdown export/import (no separate knowledge-base checkout required).
 - Versioned ability manifests whose invocations use the command approval path.
 - Bounded Claude-in-Chrome jobs for signed-in Google Calendar and Slack tabs; browser writes require approval.
 - macOS/Linux desktop notifications and clipboard-image reads; macOS TIFF clipboard content is normalized to PNG.
 - Claude Code MCP tools for every capability above.
 - Claude Code lifecycle hooks and live session-state tracking.
 - A developer CLI for state inspection, mutation, export, and raw API calls.
-- A responsive dashboard for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, and clipboard images.
+- A responsive dashboard for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
 
 ## Requirements
 
 - Node.js 24 LTS
-- pnpm 11 or newer
+- pnpm 11 or newer (recommended), or npm 11 or newer
 - Claude Code 2.1.257 or newer (2.1.275 or newer recommended)
 
 For a fresh machine, follow the full [installation guide](docs/installation.md). The abbreviated development path is:
@@ -49,6 +52,17 @@ pnpm install
 pnpm build
 pnpm dev
 ```
+
+Or use the npm workflow included with Node.js:
+
+```bash
+npm ci
+npm run build
+npm run dev
+```
+
+Use one package manager per checkout. See [Package managers](docs/package-managers.md) for every
+command equivalent and the lockfile policy.
 
 In development, the daemon listens on `127.0.0.1:4317` and Vite serves the hot-reloading dashboard on [http://127.0.0.1:4318](http://127.0.0.1:4318).
 
@@ -81,6 +95,16 @@ For a dedicated controlling session, use:
 
 ```bash
 pnpm controller
+```
+
+To run that controller as a native background Claude Code session and attach to its terminal later:
+
+```bash
+pnpm controller:bg                 # manual permission mode
+pnpm controller:bg:auto            # automatic mode
+pnpm controller:bg:bypass          # bypass mode; isolated environments only
+# Claude prints an ID, then:
+claude attach <id>
 ```
 
 To enable Claude Code's built-in Bash sandbox with no unsandboxed fallback and a hard failure when isolation is unavailable:
@@ -133,9 +157,14 @@ pnpm cca claude-session stop <id-or-name>
 
 Messages use Claude Code's native `ListAgents`/`SendMessage` boundary. The daemon never injects terminal keystrokes and never edits `~/.claude/jobs` or transcript files. See [Claude session orchestration](docs/claude-session-orchestration.md) for the supported operations and safety model.
 
-## Developer CLI
+## Direct state control
 
-The `cca` command manipulates state through the same validated daemon API used by MCP and the dashboard. This repository-local CLI reads `.data/access-token` by default; `CC_ASSISTANT_DATA_DIR` can point it at a service installation instead.
+The dashboard's **State studio** and the `cca` command manipulate state through the same validated
+daemon API used by MCP. Neither opens SQLite directly, so schema validation, optimistic revisions,
+audit events, and SSE updates are preserved. State studio shows a complete aggregate snapshot and
+offers a developer-facing GET/POST/PATCH/DELETE API console for `/api/*` routes.
+
+The repository-local CLI reads `.data/access-token` by default; `CC_ASSISTANT_DATA_DIR` can point it at a service installation instead.
 
 ```bash
 pnpm cca status
@@ -149,6 +178,9 @@ pnpm cca run command "Check git status" git status
 pnpm cca approval list --status pending
 pnpm cca approval approve <approval-id>
 pnpm cca memory create project-orchid "Project Orchid" --body "Important context"
+pnpm cca memory export --output ./memory-export --all
+pnpm cca memory import ./memory-export          # preview
+pnpm cca memory import ./memory-export --apply
 pnpm cca schedule create "Stand up" --trigger-kind interval --trigger '{"everyMs":3600000}' --action-kind reminder --action '{"title":"Stand up","body":"Move for five minutes"}'
 pnpm cca browser calendar list
 pnpm cca browser calendar create '{"title":"Review","start":"2026-09-17T13:00:00.000Z","end":"2026-09-17T13:30:00.000Z"}'

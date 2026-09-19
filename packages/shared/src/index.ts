@@ -119,6 +119,8 @@ export type ClaudeAgentSession = z.infer<typeof ClaudeAgentSessionSchema>;
 export const ClaudeAgentSessionListSchema = z.object({ sessions: z.array(ClaudeAgentSessionSchema) });
 
 const ClaudeSessionTargetSchema = z.string().trim().min(1).max(240);
+export const ClaudePermissionModeSchema = z.enum(["manual", "auto", "bypassPermissions"]);
+export type ClaudePermissionMode = z.infer<typeof ClaudePermissionModeSchema>;
 export const ClaudeSessionControlSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("message"),
@@ -141,7 +143,7 @@ export const ClaudeSessionControlSchema = z.discriminatedUnion("action", [
     name: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/).optional(),
     model: z.string().trim().min(1).max(120).optional(),
     effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-    permissionMode: z.enum(["default", "acceptEdits", "plan", "dontAsk"]).default("default"),
+    permissionMode: ClaudePermissionModeSchema.default("manual"),
   }).strict(),
 ]);
 export type ClaudeSessionControlInput = z.input<typeof ClaudeSessionControlSchema>;
@@ -369,6 +371,7 @@ export const MemoryStatusSchema = z.enum(memoryStatuses);
 export const MemoryProvenanceSchema = z.object({
   sourceType: z.string().min(1).max(80),
   sourceUri: z.string().max(2_000).nullable(),
+  sourceRef: z.string().max(500).nullable().default(null),
   capturedAt: z.iso.datetime(),
 });
 export type MemoryProvenance = z.infer<typeof MemoryProvenanceSchema>;
@@ -404,6 +407,7 @@ export const MemoryMetadataInputSchema = z.object({
   project: z.string().trim().min(1).max(160).nullable().optional(),
   sourceType: z.string().trim().min(1).max(80).default("manual"),
   sourceUri: z.string().trim().max(2_000).nullable().optional(),
+  sourceRef: z.string().trim().max(500).nullable().optional(),
   capturedAt: z.iso.datetime().optional(),
 });
 export const CreateMemorySchema = z.object({
@@ -417,7 +421,6 @@ export const IngestMemorySchema = CreateMemorySchema.extend({
 });
 export type IngestMemoryInput = z.input<typeof IngestMemorySchema>;
 export const UpdateMemorySchema = z.object({
-  slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(160).optional(),
   title: z.string().trim().min(1).max(240).optional(),
   body: z.string().max(200_000).optional(),
   summary: z.string().trim().max(2_000).nullable().optional(),
@@ -425,8 +428,10 @@ export const UpdateMemorySchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
   aliases: z.array(z.string().trim().min(1).max(160)).max(50).optional(),
   project: z.string().trim().min(1).max(160).nullable().optional(),
+  status: MemoryStatusSchema.optional(),
   sourceType: z.string().trim().min(1).max(80).optional(),
   sourceUri: z.string().trim().max(2_000).nullable().optional(),
+  sourceRef: z.string().trim().max(500).nullable().optional(),
   capturedAt: z.iso.datetime().optional(),
   expectedRevision: z.number().int().positive(),
 }).refine((value) => Object.keys(value).some((key) => key !== "expectedRevision"), "At least one memory field must be supplied");
@@ -477,6 +482,53 @@ export const MemoryRecallResultSchema = z.object({
   characterLimit: z.number().int().positive(),
 });
 export type MemoryRecallResult = z.infer<typeof MemoryRecallResultSchema>;
+
+export const MemoryTagSchema = z.object({
+  tag: z.string().min(1),
+  count: z.number().int().nonnegative(),
+});
+export type MemoryTag = z.infer<typeof MemoryTagSchema>;
+export const MemoryTagListSchema = z.object({ tags: z.array(MemoryTagSchema) });
+
+export const MemoryMarkdownFileSchema = z.object({
+  path: z.string().trim().min(1).max(500),
+  content: z.string().max(300_000),
+});
+export type MemoryMarkdownFile = z.infer<typeof MemoryMarkdownFileSchema>;
+
+export const MemoryMarkdownExportSchema = z.object({
+  formatVersion: z.literal(1),
+  exportedAt: z.iso.datetime(),
+  files: z.array(MemoryMarkdownFileSchema).max(10_000),
+});
+export type MemoryMarkdownExport = z.infer<typeof MemoryMarkdownExportSchema>;
+
+export const MemoryMarkdownImportRequestSchema = z.object({
+  files: z.array(MemoryMarkdownFileSchema).min(1).max(10_000),
+});
+export type MemoryMarkdownImportRequest = z.infer<typeof MemoryMarkdownImportRequestSchema>;
+
+export const memoryImportActions = ["create", "update", "unchanged", "conflict", "invalid"] as const;
+export const MemoryImportActionSchema = z.enum(memoryImportActions);
+export const MemoryImportEntrySchema = z.object({
+  path: z.string().min(1),
+  slug: z.string().nullable(),
+  action: MemoryImportActionSchema,
+  reason: z.string().nullable(),
+  currentRevision: z.number().int().positive().nullable(),
+  importedRevision: z.number().int().nonnegative().nullable(),
+});
+export const MemoryImportPlanSchema = z.object({
+  entries: z.array(MemoryImportEntrySchema),
+  summary: z.object({
+    create: z.number().int().nonnegative(),
+    update: z.number().int().nonnegative(),
+    unchanged: z.number().int().nonnegative(),
+    conflict: z.number().int().nonnegative(),
+    invalid: z.number().int().nonnegative(),
+  }),
+});
+export type MemoryImportPlan = z.infer<typeof MemoryImportPlanSchema>;
 
 const AbilityPropertySchema = z.object({
   type: z.enum(["string", "number", "integer", "boolean", "array", "object"]),

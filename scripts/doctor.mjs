@@ -12,6 +12,7 @@ const unknown = [...args].filter((argument) => !allowed.has(argument));
 
 if (help) {
   writeSync(1, `Usage: pnpm assistant:doctor [--json] [--offline]
+       npm run assistant:doctor -- [--json] [--offline]
 
 Runs read-only readiness checks for cc-assistant. The default mode checks the
 local daemon and authenticated browser-worker status. --offline skips daemon
@@ -68,7 +69,7 @@ const requiredArtifacts = [
 const missingArtifacts = requiredArtifacts.filter((path) => !existsSync(join(projectRoot, path)));
 add("build", missingArtifacts.length === 0 ? "pass" : "fail",
   missingArtifacts.length === 0 ? "All runtime artifacts are built" : `Missing: ${missingArtifacts.join(", ")}`,
-  missingArtifacts.length === 0 ? undefined : "Run pnpm build && pnpm plugin:build.");
+  missingArtifacts.length === 0 ? undefined : "Run pnpm build && pnpm plugin:build (or the npm run equivalents).");
 
 const pluginManifest = existsSync(join(projectRoot, "claude-plugin", ".claude-plugin", "plugin.json"));
 add("plugin", pluginManifest ? "pass" : "fail", "Claude Code plugin manifest",
@@ -109,9 +110,9 @@ if (offline) {
     const payload = await health.json();
     add("daemon", health.ok && payload.ok === true ? "pass" : "fail",
       health.ok ? `Daemon ${payload.version ?? "unknown"} at ${daemonUrl}` : `Daemon returned HTTP ${health.status}`,
-      health.ok ? undefined : "Start pnpm dev:daemon and verify CC_ASSISTANT_DAEMON_URL.");
+      health.ok ? undefined : "Start pnpm dev:daemon or npm run dev:daemon, then verify CC_ASSISTANT_DAEMON_URL.");
   } catch {
-    add("daemon", "fail", `Daemon is unavailable at ${daemonUrl}`, "Start pnpm dev:daemon and verify the loopback URL.");
+    add("daemon", "fail", `Daemon is unavailable at ${daemonUrl}`, "Start pnpm dev:daemon or npm run dev:daemon, then verify the loopback URL.");
   }
 
   try {
@@ -120,9 +121,9 @@ if (offline) {
     const ready = response.ok && response.headers.get("content-type")?.includes("text/html") === true && body.includes('id="root"');
     add("dashboard", ready ? "pass" : "fail",
       ready ? `Built dashboard is served at ${daemonUrl}` : "Daemon is not serving the built dashboard",
-      ready ? undefined : "Run pnpm build and restart the daemon.");
+      ready ? undefined : "Run pnpm build or npm run build, then restart the daemon.");
   } catch {
-    add("dashboard", "fail", "Could not load the production dashboard", "Run pnpm build and restart the daemon.");
+    add("dashboard", "fail", "Could not load the production dashboard", "Run pnpm build or npm run build, then restart the daemon.");
   }
 
   if (token) {

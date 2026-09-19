@@ -27,10 +27,10 @@ importers:
   apps/cli:
     dependencies:
       '@cc-assistant/client':
-        specifier: workspace:*
+        specifier: file:../../packages/client
         version: link:../../packages/client
       '@cc-assistant/shared':
-        specifier: workspace:*
+        specifier: file:../../packages/shared
         version: link:../../packages/shared
 
   apps/daemon:
@@ -39,7 +39,7 @@ importers:
         specifier: ^0.3.0
         version: 0.3.273(@anthropic-ai/sdk@0.126.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(zod@4.6.5)
       '@cc-assistant/shared':
-        specifier: workspace:*
+        specifier: file:../../packages/shared
         version: link:../../packages/shared
       '@fastify/cookie':
         specifier: ^11.0.0
@@ -54,10 +54,10 @@ importers:
   apps/mcp:
     dependencies:
       '@cc-assistant/client':
-        specifier: workspace:*
+        specifier: file:../../packages/client
         version: link:../../packages/client
       '@cc-assistant/shared':
-        specifier: workspace:*
+        specifier: file:../../packages/shared
         version: link:../../packages/shared
       '@modelcontextprotocol/server':
         specifier: ^2.0.0
@@ -69,7 +69,7 @@ importers:
   apps/web:
     dependencies:
       '@cc-assistant/shared':
-        specifier: workspace:*
+        specifier: file:../../packages/shared
         version: link:../../packages/shared
       '@vitejs/plugin-react':
         specifier: ^5.0.0

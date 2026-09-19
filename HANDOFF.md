@@ -17,8 +17,8 @@ then update the stale documentation as part of the change.
   `/home/nima/Documents/codes/all-chat/cc-assistant`
 - On the current Linux machine that path resolves to `/home/nima/code/all-chat/cc-assistant`.
   Avoid treating the two spellings as separate checkouts.
-- Latest functional feature at the time of this handoff: approval-backed discovery, messaging,
-  and lifecycle orchestration of other Claude Code sessions.
+- Latest functional feature at the time of this handoff: standalone knowledge-base interchange,
+  developer state studio, and native attachable controller sessions with explicit permission modes.
 - `.data/`, all normal `dist/` directories, dependencies, and local editor metadata are ignored.
   The generated Claude plugin server bundle is the important exception and is committed.
 
@@ -29,6 +29,10 @@ git status --short
 git log -5 --oneline
 pnpm assistant:doctor --offline
 ```
+
+npm 11 is also supported: use `npm ci` and `npm run assistant:doctor -- --offline`. Keep one
+package manager per checkout; [`docs/package-managers.md`](docs/package-managers.md) has the full
+mapping and lockfile policy.
 
 Do not discard a dirty worktree. Uncommitted changes may belong to the user or another agent.
 
@@ -233,10 +237,16 @@ Memory supports canonical Markdown records, stable slugs, summaries, projects, k
 aliases, provenance, capture timestamps, immutable revisions, archive, `[[wiki links]]`,
 backlinks, FTS5/BM25 search, and deterministic bounded recall.
 
-`MemorySearchProvider` is the seam for a future semantic/vector implementation. Semantic memory
-and migration from the separate `cc-knowledge-base` project are not implemented here; follow
-[`docs/handover/semantic-memory.md`](docs/handover/semantic-memory.md) rather than merging the
-other project ad hoc.
+`MemorySearchProvider` is the seam for a future semantic/vector implementation. The reusable
+`cc-knowledge-base` prototype features now live here: source references, normalized tag inventory,
+strict deterministic Markdown export/import, dry-run conflict planning, an operating playbook, and
+the knowledge-base flowchart. This repository is standalone and does not import the other checkout
+at runtime. Semantic/vector retrieval remains planned in
+[`docs/handover/semantic-memory.md`](docs/handover/semantic-memory.md).
+
+The web dashboard includes a developer-facing **State studio** with an aggregate JSON snapshot and
+a validated raw `/api/*` console. It never edits SQLite directly. The CLI remains the scriptable
+state interface and also exposes memory export/import.
 
 ### Abilities and native helpers
 
@@ -254,8 +264,16 @@ starts with:
 
 ```bash
 pnpm controller
+pnpm controller:bg
+pnpm controller:bg:auto
+pnpm controller:bg:bypass
 pnpm controller:sandbox
 ```
+
+Background launchers create a real Claude Code session; use the printed short ID with
+`claude attach <id>`. Manual is the default. Automatic mode is explicit, while bypass mode removes
+Claude's prompts and must be limited to an independently isolated environment. None of these modes
+bypass cc-assistant's approval ledger.
 
 The sandbox launcher enables Claude Code's built-in sandbox, denies credential paths and secret
 environment variables, blocks reads of `.data` and `.env`, refuses unsandboxed retries, and fails
@@ -266,8 +284,9 @@ local service and source of truth.
 
 ## Interfaces a new agent should use
 
-Prefer MCP in a controlling Claude session. Use `cca` for developer inspection, scripts, state
-export, or authenticated low-level API access.
+Prefer MCP in a controlling Claude session. Use the dashboard's **State studio** or `cca` for
+developer inspection, scripts, state export, or authenticated low-level API access. Both go through
+the daemon; direct SQLite editing remains unsupported.
 
 Useful commands:
 
@@ -280,6 +299,8 @@ pnpm cca session list --all --json
 pnpm cca claude-session list --json
 pnpm cca schedule list --json
 pnpm cca memory search "query" --json
+pnpm cca memory export --output ./memory-export --all
+pnpm cca memory import ./memory-export
 pnpm cca event list --limit 50 --json
 pnpm cca state export --json
 pnpm cca api GET /api/path --json
@@ -319,7 +340,7 @@ design.
 Required baseline:
 
 - Node.js 24 through 26 (`package.json` currently permits `>=24 <27`);
-- pnpm 11 or newer; and
+- pnpm 11 or newer (recommended), or npm 11 or newer; and
 - Claude Code 2.1.257 or newer, with 2.1.275 or newer recommended.
 
 Fresh setup:
@@ -329,6 +350,8 @@ pnpm install --frozen-lockfile
 pnpm build
 pnpm dev
 ```
+
+Equivalent npm setup is `npm ci`, `npm run build`, and `npm run dev`.
 
 Then open <http://127.0.0.1:4318>, authenticate with the private local token, restart Claude Code
 from the repository root, and confirm `/mcp`. For production-style source operation use
@@ -366,11 +389,9 @@ At the last completed feature handoff:
 - an injected session-control proposal/denial API smoke passed; and
 - the local dashboard rendered the orchestration controls with no console warnings or errors.
 
-One Codex sandbox run of the top-level pnpm wrapper attempted registry/store repair and could not
-use the restricted network. The already-installed TypeScript, Vite, esbuild, and Vitest binaries
-were therefore run directly and passed. Treat this as an environment/package-store issue, not a
-reason to weaken the canonical repository commands or rewrite the lockfile. In a normal terminal,
-run the canonical pnpm gates.
+The repository has dedicated workspace runners for both pnpm and npm and commits both lockfiles.
+Do not alternate managers against one `node_modules` tree. Dependency changes must refresh and
+verify both lockfiles; see [`docs/package-managers.md`](docs/package-managers.md).
 
 Do not include live Calendar or Slack writes in ordinary automated tests. Use the guarded
 [`docs/handover/live-verification.md`](docs/handover/live-verification.md) runbook and a disposable
@@ -392,7 +413,8 @@ automatically.
 The core roadmap is complete. The maintained backlog is:
 
 1. **Semantic/vector memory** — implement a hybrid provider behind `MemorySearchProvider`, decide
-   embedding/storage policy, and migrate selected material from `cc-knowledge-base` safely.
+   embedding/storage policy, and migrate any selected legacy content through the committed Markdown
+   preview/apply importer. The other checkout is no longer a code dependency.
    See [`docs/handover/semantic-memory.md`](docs/handover/semantic-memory.md).
 2. **Additional agent hosts, initially Codex** — add explicit host adapters without coupling the
    durable daemon model to Claude. See

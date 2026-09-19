@@ -75,4 +75,18 @@ describe("Claude session control service", () => {
     });
     repository.close();
   });
+
+  it("dispatches the requested Claude permission mode explicitly", async () => {
+    const runner: ClaudeCliRunner = async () => ({ stdout: JSON.stringify(inventory), stderr: "" });
+    const { repository, service } = setup(runner);
+    const proposed = await service.propose({
+      action: "dispatch", cwd: "/tmp", prompt: "Continue the controller work.",
+      name: "cc-assistant-controller", permissionMode: "bypassPermissions",
+    });
+    expect(proposed.run.metadata.args).toEqual([
+      "--bg", "--name", "cc-assistant-controller", "--permission-mode", "bypassPermissions",
+      "Continue the controller work.",
+    ]);
+    repository.close();
+  });
 });

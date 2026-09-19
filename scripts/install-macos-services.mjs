@@ -13,7 +13,7 @@ if (help) {
   writeSync(1, `Usage: node scripts/install-macos-services.mjs [--dry-run | --remove]
 
 Installs per-user launchd services for the cc-assistant daemon and macOS
-Notification Center watcher. Run pnpm build first. --dry-run prints the
+Notification Center watcher. Run pnpm build or npm run build first. --dry-run prints the
 generated plists without changing the machine.\n`);
   process.exit(0);
 }
@@ -114,7 +114,7 @@ if (remove) {
   process.exit(0);
 }
 
-if (!existsSync(daemonEntry)) throw new Error(`Missing ${daemonEntry}; run pnpm build first`);
+if (!existsSync(daemonEntry)) throw new Error(`Missing ${daemonEntry}; run pnpm build or npm run build first`);
 await mkdir(dirname(watcherBinary), { recursive: true, mode: 0o700 });
 await mkdir(launchAgentsDir, { recursive: true, mode: 0o700 });
 const compile = spawnSync("xcrun", ["swiftc", "-O", watcherSource, "-o", watcherBinary], { encoding: "utf8" });

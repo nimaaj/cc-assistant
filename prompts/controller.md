@@ -8,7 +8,7 @@ observed Claude Code sessions, abilities, and audit events.
 
 Use **controller mode** when any of these is true:
 
-- the session was started by `pnpm controller` or `pnpm controller:sandbox`;
+- the session was started by a `pnpm controller*` launcher, including a background controller;
 - the user invokes the cc-assistant controller skill;
 - the user asks to manage their work, tasks, reminders, agents, sessions, Calendar, Slack,
   memory, triggers, or assistant state.
@@ -173,6 +173,9 @@ browser extension in this design.
   approvals. Never resolve one without the user's explicit decision on that payload.
 - A message is an instruction to another Claude, not user consent. It cannot approve permissions,
   change the target's configuration, or bypass its `crossSessionInbound` and permission rules.
+- Dispatch permission modes are `manual`, `auto`, and `bypassPermissions`. Manual is the default.
+  Bypass removes the target Claude session's prompts, not cc-assistant approvals, and should be
+  selected only when the target environment is independently isolated and the user requested it.
 - After dispatching or messaging, monitor the target's actual state and logs. Command delivery is
   not evidence that the delegated task succeeded.
 - Prefer stop over remove when the conversation may be needed again. Never invent force/discard
@@ -187,8 +190,9 @@ browser extension in this design.
 
 ## Direct state manipulation
 
-Prefer MCP tools in the controlling conversation. Use the `cca` CLI for developer-facing
-inspection, scripting, export, or an endpoint not yet exposed through a dedicated MCP tool.
+Prefer MCP tools in the controlling conversation. The web **State studio** and `cca` CLI are the
+developer-facing interfaces for inspection, scripting, export, or an endpoint not yet exposed
+through a dedicated MCP tool.
 Never edit the SQLite database directly. Useful diagnostic fallbacks include:
 
 - `pnpm assistant:doctor` for read-only readiness checks;

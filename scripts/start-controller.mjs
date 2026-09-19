@@ -14,12 +14,18 @@ export const bootstrapPrompt = [
 ].join(" ");
 
 export function usage() {
-  return `Start an interactive Claude Code session as the cc-assistant controller.
+  return `Start Claude Code as the cc-assistant controller.
 
 Usage:
-  node scripts/start-controller.mjs [--sandbox] [--no-bootstrap] [--dry-run] [-- <claude args>]
+  node scripts/start-controller.mjs [--background] [--permission-mode <mode>]
+                                    [--sandbox] [--no-bootstrap] [--dry-run] [-- <claude args>]
 
 Options:
+  --background    Start a named background Claude Code session. Claude prints a short ID;
+                  use "claude attach <id>" for the full interactive terminal.
+  --permission-mode <mode>
+                  manual, auto, or bypassPermissions. Bypass removes Claude's permission
+                  prompts and should be used only in a separately isolated environment.
   --sandbox       Use strict built-in Bash sandboxing. Sandbox startup failure is fatal,
                   and Claude cannot retry a blocked command outside the sandbox.
   --no-bootstrap  Start the session without sending the controller initialization prompt.
@@ -27,12 +33,17 @@ Options:
   --help          Show this help.
 
 Unrecognized options are forwarded to Claude Code. A -- separator is optional when invoking the
-script directly and conventional when invoking it through pnpm.
+script directly and conventional when invoking it through a package manager.
 
 Examples:
   pnpm controller
+  pnpm controller:bg --permission-mode auto
+  pnpm controller:bg:bypass
   pnpm controller:sandbox
   pnpm controller:sandbox -- --model opus --effort high
+  npm run controller
+  npm run controller:bg -- --permission-mode auto
+  npm run controller:sandbox -- --model opus --effort high
 `;
 }
 
@@ -42,6 +53,8 @@ async function writeStdout(value) {
 
 export function buildControllerLaunch(input) {
   let sandbox = false;
+  let background = false;
+  let permissionMode = "manual";
   let noBootstrap = false;
   let dryRun = false;
   let help = false;
@@ -54,18 +67,30 @@ export function buildControllerLaunch(input) {
       break;
     }
     if (value === "--sandbox") sandbox = true;
+    else if (value === "--background" || value === "--bg") background = true;
+    else if (value === "--permission-mode") {
+      const candidate = input[index + 1];
+      if (!["manual", "auto", "bypassPermissions"].includes(candidate)) {
+        throw new Error("--permission-mode must be manual, auto, or bypassPermissions");
+      }
+      permissionMode = candidate;
+      index += 1;
+    }
     else if (value === "--no-bootstrap") noBootstrap = true;
     else if (value === "--dry-run") dryRun = true;
     else if (value === "--help" || value === "-h") help = true;
     else passthrough.push(value);
   }
 
-  const args = ["--name", sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller"];
+  const args = [];
+  if (background) args.push("--bg");
+  args.push("--name", sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller");
   if (sandbox) args.push("--settings", sandboxSettings);
+  args.push("--permission-mode", permissionMode);
   args.push(...passthrough);
   if (!noBootstrap) args.push(bootstrapPrompt);
 
-  return { command: "claude", args, cwd: projectRoot, sandbox, dryRun, help };
+  return { command: "claude", args, cwd: projectRoot, sandbox, background, permissionMode, dryRun, help };
 }
 
 export async function main(input = process.argv.slice(2)) {
@@ -82,9 +107,8 @@ export async function main(input = process.argv.slice(2)) {
   }
 
   process.stdout.write(
-    launch.sandbox
-      ? "Starting cc-assistant controller with strict Claude Code Bash sandboxing.\n"
-      : "Starting cc-assistant controller with normal Claude Code permissions.\n",
+    `Starting ${launch.background ? "background " : ""}cc-assistant controller in ${launch.permissionMode} mode${launch.sandbox ? " with strict Bash sandboxing" : ""}.\n` +
+    (launch.background ? "Claude will print a short session ID. Attach with: claude attach <id>\n" : ""),
   );
 
   const child = spawn(launch.command, launch.args, {

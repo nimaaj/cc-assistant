@@ -36,7 +36,7 @@ import {
 
 export class AuthenticationError extends Error {}
 
-async function request(path: string, init: RequestInit = {}): Promise<unknown> {
+export async function rawApiRequest(path: string, init: RequestInit = {}): Promise<unknown> {
   const response = await fetch(path, {
     ...init,
     credentials: "include",
@@ -58,8 +58,10 @@ async function request(path: string, init: RequestInit = {}): Promise<unknown> {
   return response.json() as Promise<unknown>;
 }
 
+const request = rawApiRequest;
+
 export async function login(token: string): Promise<void> {
-  await request("/api/session", { method: "POST", body: JSON.stringify({ token }) });
+  await rawApiRequest("/api/session", { method: "POST", body: JSON.stringify({ token }) });
 }
 
 export async function logout(): Promise<void> {

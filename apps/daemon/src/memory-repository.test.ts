@@ -113,4 +113,20 @@ describe("MemoryRepository", () => {
     expect(new Set([...first, ...second].map((memory) => memory.id)).size).toBe(4);
     store.close();
   });
+
+  it("lists normalized tag counts and exports stable provenance", () => {
+    const store = new MemoryRepository(path());
+    store.ingest({
+      title: "Imported decision", body: "Keep this context.", tags: ["Project X", "project x", "Decision"],
+      sourceType: "conversation", sourceRef: "session-42",
+    });
+    store.create({ title: "Second decision", body: "More context.", tags: ["Decision"] });
+
+    expect(store.listTags()).toEqual([
+      { tag: "decision", count: 2 },
+      { tag: "project x", count: 1 },
+    ]);
+    expect(store.exportAll()[0]?.provenance).toMatchObject({ sourceRef: "session-42" });
+    store.close();
+  });
 });

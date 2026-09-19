@@ -9,6 +9,9 @@ import {
   ClaudeSessionControlSchema,
   CreateMemorySchema,
   IngestMemorySchema,
+  MemoryImportPlanSchema,
+  MemoryMarkdownExportSchema,
+  MemoryMarkdownImportRequestSchema,
   CreateScheduleSchema,
   CreateTaskSchema,
   ProposeCommandSchema,
@@ -31,7 +34,8 @@ import { EventHub } from "./event-hub.js";
 import { ExecutionRepository } from "./execution-repository.js";
 import { ExecutionInputError, ExecutionService, RunNotFoundError } from "./execution-service.js";
 import { NativeService } from "./native-service.js";
-import { MemoryNotFoundError, MemoryRepository, MemoryRevisionConflictError, MemorySlugConflictError } from "./memory-repository.js";
+import { MemoryNotFoundError, MemoryRepository, MemoryRevisionConflictError } from "./memory-repository.js";
+import { parseMemoryMarkdown, serializeMemoryMarkdown, type ImportedMemory } from "./memory-markdown.js";
 import { SessionRepository } from "./session-repository.js";
 import {
   RevisionConflictError,
@@ -65,6 +69,74 @@ function requestSource(header: string | string[] | undefined): "mcp" | "cli" | "
   if (header === "mcp") return "mcp";
   if (header === "cli") return "cli";
   return "web";
+}
+
+function normalizedImportValues(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))].sort();
+}
+
+function importedMemoryMatches(current: ReturnType<MemoryRepository["get"]>, imported: ImportedMemory): boolean {
+  return current !== undefined && current.slug === imported.slug && current.title === imported.title &&
+    current.body === imported.body && current.summary === imported.summary && current.kind === imported.kind &&
+    JSON.stringify(current.tags) === JSON.stringify(normalizedImportValues(imported.tags)) &&
+    JSON.stringify(current.aliases) === JSON.stringify(normalizedImportValues(imported.aliases)) &&
+    current.project === imported.project && current.status === imported.status &&
+    JSON.stringify(current.provenance) === JSON.stringify(imported.provenance);
+}
+
+function planMemoryMarkdownImport(
+  memoryRepository: MemoryRepository,
+  files: Array<{ path: string; content: string }>,
+): { plan: ReturnType<typeof MemoryImportPlanSchema.parse>; parsed: Map<string, ImportedMemory> } {
+  const parsed = new Map<string, ImportedMemory>();
+  const errors = new Map<string, string>();
+  const pathCounts = new Map<string, number>();
+  for (const file of files) {
+    pathCounts.set(file.path, (pathCounts.get(file.path) ?? 0) + 1);
+    try { parsed.set(file.path, parseMemoryMarkdown(file.path, file.content)); }
+    catch (error) { errors.set(file.path, error instanceof Error ? error.message : "Invalid memory Markdown"); }
+  }
+  const slugCounts = new Map<string, number>();
+  const idCounts = new Map<string, number>();
+  for (const memory of parsed.values()) {
+    slugCounts.set(memory.slug, (slugCounts.get(memory.slug) ?? 0) + 1);
+    if (memory.id) idCounts.set(memory.id, (idCounts.get(memory.id) ?? 0) + 1);
+  }
+  const entries = files.map((file) => {
+    const imported = parsed.get(file.path);
+    if (!imported) return { path: file.path, slug: null, action: "invalid" as const,
+      reason: errors.get(file.path) ?? "Invalid memory Markdown", currentRevision: null, importedRevision: null };
+    if ((pathCounts.get(file.path) ?? 0) > 1) return { path: file.path, slug: imported.slug,
+      action: "invalid" as const, reason: `Duplicate import path ${file.path}`,
+      currentRevision: null, importedRevision: imported.revision };
+    if ((slugCounts.get(imported.slug) ?? 0) > 1 || (imported.id && (idCounts.get(imported.id) ?? 0) > 1)) {
+      return { path: file.path, slug: imported.slug, action: "invalid" as const,
+        reason: "Duplicate memory identity appears more than once in the import",
+        currentRevision: null, importedRevision: imported.revision };
+    }
+    const byId = imported.id ? memoryRepository.get(imported.id) : undefined;
+    const bySlug = memoryRepository.get(imported.slug);
+    if (byId && bySlug && byId.id !== bySlug.id) return { path: file.path, slug: imported.slug,
+      action: "conflict" as const, reason: "The exported ID and slug resolve to different memories",
+      currentRevision: bySlug.revision, importedRevision: imported.revision };
+    const current = byId ?? bySlug;
+    if (byId && byId.slug !== imported.slug) return { path: file.path, slug: imported.slug,
+      action: "conflict" as const, reason: `Memory IDs are stable; ${byId.slug} cannot be renamed to ${imported.slug}`,
+      currentRevision: byId.revision, importedRevision: imported.revision };
+    if (!current) return { path: file.path, slug: imported.slug, action: "create" as const,
+      reason: null, currentRevision: null, importedRevision: imported.revision };
+    if (importedMemoryMatches(current, imported)) return { path: file.path, slug: imported.slug,
+      action: "unchanged" as const, reason: null, currentRevision: current.revision, importedRevision: imported.revision };
+    if (imported.revision !== current.revision) return { path: file.path, slug: imported.slug,
+      action: "conflict" as const,
+      reason: `Markdown revision ${imported.revision} does not match current revision ${current.revision}`,
+      currentRevision: current.revision, importedRevision: imported.revision };
+    return { path: file.path, slug: imported.slug, action: "update" as const,
+      reason: null, currentRevision: current.revision, importedRevision: imported.revision };
+  });
+  const summary = { create: 0, update: 0, unchanged: 0, conflict: 0, invalid: 0 };
+  for (const entry of entries) summary[entry.action] += 1;
+  return { plan: MemoryImportPlanSchema.parse({ entries, summary }), parsed };
 }
 
 export interface AppDependencies {
@@ -181,9 +253,6 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     }
     if (error instanceof MemoryRevisionConflictError) {
       return reply.code(409).send({ error: "memory_revision_conflict", message: error.message });
-    }
-    if (error instanceof MemorySlugConflictError) {
-      return reply.code(409).send({ error: "memory_slug_conflict", message: error.message });
     }
     if (error instanceof z.ZodError) {
       return reply.code(400).send({
@@ -434,6 +503,62 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   app.post("/api/triggers/system-notification", async (request) => {
     const input = z.object({ app: z.string().optional(), title: z.string().optional(), body: z.string().optional() }).parse(request.body);
     return { matched: await automationService.ingestSystemNotification(input) };
+  });
+
+  app.get("/api/memories/tags", async (request) => {
+    const query = z.object({ includeArchived: z.stringbool().default(false) }).parse(request.query);
+    return { tags: memoryRepository.listTags(query.includeArchived) };
+  });
+
+  app.get("/api/memories/export", async (request) => {
+    const query = z.object({ includeArchived: z.stringbool().default(false) }).parse(request.query);
+    return MemoryMarkdownExportSchema.parse({
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      files: memoryRepository.exportAll(query.includeArchived).map((memory) => ({
+        path: `memories/${memory.slug}.md`, content: serializeMemoryMarkdown(memory),
+      })),
+    });
+  });
+
+  app.post("/api/memories/import/preview", { bodyLimit: 100 * 1024 * 1024 }, async (request) => {
+    const input = MemoryMarkdownImportRequestSchema.parse(request.body);
+    return planMemoryMarkdownImport(memoryRepository, input.files).plan;
+  });
+
+  app.post("/api/memories/import", { bodyLimit: 100 * 1024 * 1024 }, async (request, reply) => {
+    const input = MemoryMarkdownImportRequestSchema.parse(request.body);
+    const { plan, parsed } = planMemoryMarkdownImport(memoryRepository, input.files);
+    if (plan.summary.conflict > 0 || plan.summary.invalid > 0) {
+      return reply.code(409).send({ error: "memory_import_blocked",
+        message: "Resolve invalid files and revision conflicts before applying this import", plan });
+    }
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    const memories = [];
+    for (const entry of plan.entries) {
+      if (entry.action === "unchanged") continue;
+      const imported = parsed.get(entry.path);
+      if (!imported) continue;
+      if (entry.action === "create") {
+        let memory = memoryRepository.ingest({
+          slug: imported.slug, title: imported.title, body: imported.body, summary: imported.summary,
+          kind: imported.kind, tags: imported.tags, aliases: imported.aliases, project: imported.project,
+          sourceType: imported.provenance.sourceType, sourceUri: imported.provenance.sourceUri,
+          sourceRef: imported.provenance.sourceRef, capturedAt: imported.provenance.capturedAt,
+        }, source);
+        if (imported.status === "archived") memory = memoryRepository.archive(memory.id, memory.revision, source);
+        memories.push(memory);
+      } else if (entry.action === "update") {
+        memories.push(memoryRepository.update(imported.slug, {
+          title: imported.title, body: imported.body, summary: imported.summary, kind: imported.kind,
+          tags: imported.tags, aliases: imported.aliases, project: imported.project, status: imported.status,
+          sourceType: imported.provenance.sourceType, sourceUri: imported.provenance.sourceUri,
+          sourceRef: imported.provenance.sourceRef, capturedAt: imported.provenance.capturedAt,
+          expectedRevision: imported.revision,
+        }, source));
+      }
+    }
+    return { plan, memories };
   });
 
   app.get("/api/memories", async (request) => {

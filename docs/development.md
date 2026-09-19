@@ -58,6 +58,9 @@ Follow [Installation](installation.md) through the offline doctor, then run:
 pnpm dev
 ```
 
+The npm equivalent is `npm run dev`. pnpm and npm are both supported, but use only one per
+checkout; see [Package managers](package-managers.md).
+
 Use a second terminal for checks and CLI calls. The Vite dashboard runs on port 4318 and proxies API requests to the daemon on port 4317.
 
 ## Standard verification
@@ -72,6 +75,12 @@ pnpm plugin:build
 pnpm plugin:validate
 pnpm assistant:doctor --offline
 ```
+
+With npm, use `npm test`, `npm run typecheck`, `npm run build`, `npm run plugin:build`,
+`npm run plugin:validate`, and `npm run assistant:doctor -- --offline`.
+
+Dependency changes must keep both `pnpm-lock.yaml` and `package-lock.json` current and must be
+verified through both workspace runners.
 
 With a local daemon running:
 

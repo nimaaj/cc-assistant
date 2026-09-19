@@ -9,6 +9,8 @@ const { buildControllerLaunch } = await import("../../../scripts/start-controlle
     args: string[];
     cwd: string;
     sandbox: boolean;
+    background: boolean;
+    permissionMode: string;
   };
 };
 
@@ -28,6 +30,16 @@ describe("Claude controller launcher", () => {
     expect(output.sandbox).toBe(false);
     expect(output.args).toContain("--model");
     expect(output.args).toContain("opus");
+    expect(output.permissionMode).toBe("manual");
+  });
+
+  it("starts an attachable background controller with an explicit permission mode", () => {
+    const output = buildControllerLaunch(["--background", "--permission-mode", "auto", "--dry-run"]);
+    expect(output.background).toBe(true);
+    expect(output.permissionMode).toBe("auto");
+    expect(output.args).toEqual(expect.arrayContaining([
+      "--bg", "--name", "cc-assistant-controller", "--permission-mode", "auto",
+    ]));
   });
 
   it("keeps sandbox fallback disabled and protects local assistant state", () => {
