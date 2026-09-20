@@ -59,7 +59,8 @@ The launcher:
 
 1. fixes the working directory to the cc-assistant checkout;
 2. names the session `cc-assistant-controller`;
-3. lets Claude Code load `CLAUDE.md`, `.claude/settings.json`, and `.mcp.json` normally;
+3. loads `.claude/controller.settings.json`, which explicitly enables this checkout's committed
+   project MCP servers for non-interactive and background startup;
 4. sends a read-only controller bootstrap prompt;
 5. asks Claude to summarize current focus and wait for direction.
 
@@ -85,6 +86,12 @@ ID; `claude attach` then opens Claude Code's own interactive terminal for that s
 pnpm controller:bg
 claude attach <id>
 ```
+
+Background sessions cannot answer Claude Code's first-run project MCP trust prompt. The launcher
+therefore passes `.claude/controller.settings.json` with `--settings`. That file enables the MCP
+servers declared by this checkout's `.mcp.json`; it does not approve arbitrary user-level MCP
+servers. Running the launcher is the explicit trust action for this repository. If `.mcp.json`
+changes, inspect it before launching a new controller.
 
 Choose a permission mode explicitly when the default manual prompts are not appropriate:
 
@@ -132,6 +139,7 @@ The launcher passes `.claude/controller-sandbox.settings.json` through Claude Co
 
 | Setting | Value | Reason |
 | --- | --- | --- |
+| `enableAllProjectMcpServers` | `true` | Allows this repository's declared MCP bridge to start without an interactive trust prompt |
 | `sandbox.enabled` | `true` | Enables OS-enforced Bash filesystem and network isolation |
 | `sandbox.autoAllowBashIfSandboxed` | `true` | Lets commands inside the boundary run without repetitive prompts |
 | `sandbox.allowUnsandboxedCommands` | `false` | Disables retrying a blocked command outside the sandbox |

@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const controllerSettings = resolve(projectRoot, ".claude/controller.settings.json");
 export const sandboxSettings = resolve(projectRoot, ".claude/controller-sandbox.settings.json");
 export const bootstrapPrompt = [
   "Enter cc-assistant controller mode.",
@@ -83,14 +84,15 @@ export function buildControllerLaunch(input) {
   }
 
   const args = [];
+  const settings = sandbox ? sandboxSettings : controllerSettings;
   if (background) args.push("--bg");
   args.push("--name", sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller");
-  if (sandbox) args.push("--settings", sandboxSettings);
+  args.push("--settings", settings);
   args.push("--permission-mode", permissionMode);
   args.push(...passthrough);
   if (!noBootstrap) args.push(bootstrapPrompt);
 
-  return { command: "claude", args, cwd: projectRoot, sandbox, background, permissionMode, dryRun, help };
+  return { command: "claude", args, cwd: projectRoot, settings, sandbox, background, permissionMode, dryRun, help };
 }
 
 export async function main(input = process.argv.slice(2)) {
@@ -100,7 +102,7 @@ export async function main(input = process.argv.slice(2)) {
     return;
   }
 
-  if (launch.sandbox) await access(sandboxSettings);
+  await access(launch.settings);
   if (launch.dryRun) {
     await writeStdout(`${JSON.stringify(launch, null, 2)}\n`);
     return;

@@ -8,6 +8,7 @@ const { buildControllerLaunch } = await import("../../../scripts/start-controlle
   buildControllerLaunch(input: string[]): {
     args: string[];
     cwd: string;
+    settings: string;
     sandbox: boolean;
     background: boolean;
     permissionMode: string;
@@ -28,6 +29,10 @@ describe("Claude controller launcher", () => {
   it("forwards Claude flags without interpreting them as launcher options", () => {
     const output = buildControllerLaunch(["--dry-run", "--model", "opus"]);
     expect(output.sandbox).toBe(false);
+    expect(output.settings).toBe(resolve(projectRoot, ".claude/controller.settings.json"));
+    expect(output.args).toEqual(expect.arrayContaining([
+      "--settings", resolve(projectRoot, ".claude/controller.settings.json"),
+    ]));
     expect(output.args).toContain("--model");
     expect(output.args).toContain("opus");
     expect(output.permissionMode).toBe("manual");
@@ -46,6 +51,7 @@ describe("Claude controller launcher", () => {
     const settings = JSON.parse(
       readFileSync(resolve(projectRoot, ".claude/controller-sandbox.settings.json"), "utf8"),
     ) as {
+      enableAllProjectMcpServers: boolean;
       permissions: { blockReadsOutsideWorkingDirectories: boolean; deny: string[] };
       sandbox: {
         enabled: boolean;
@@ -54,6 +60,7 @@ describe("Claude controller launcher", () => {
         filesystem: { denyRead: string[] };
       };
     };
+    expect(settings.enableAllProjectMcpServers).toBe(true);
     expect(settings.sandbox.enabled).toBe(true);
     expect(settings.sandbox.allowUnsandboxedCommands).toBe(false);
     expect(settings.sandbox.failIfUnavailable).toBe(true);
@@ -61,5 +68,12 @@ describe("Claude controller launcher", () => {
     expect(settings.sandbox.filesystem.denyRead).toContain("../.data");
     expect(settings.permissions.blockReadsOutsideWorkingDirectories).toBe(true);
     expect(settings.permissions.deny).toContain("Read(.data/**)");
+  });
+
+  it("explicitly trusts the repository MCP configuration for headless launches", () => {
+    const settings = JSON.parse(
+      readFileSync(resolve(projectRoot, ".claude/controller.settings.json"), "utf8"),
+    ) as { enableAllProjectMcpServers: boolean };
+    expect(settings.enableAllProjectMcpServers).toBe(true);
   });
 });

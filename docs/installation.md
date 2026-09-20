@@ -174,6 +174,10 @@ pnpm controller:bg
 claude attach <id>
 ```
 
+The controller launcher passes `.claude/controller.settings.json` explicitly so a background
+session can trust this checkout's committed `.mcp.json` without waiting at an interactive prompt.
+Review `.mcp.json` before using the launcher in a checkout you do not trust.
+
 The default is manual permission handling. `pnpm controller:bg:auto` selects Claude Code's
 automatic mode, while `pnpm controller:bg:bypass` selects `bypassPermissions`. Bypass mode removes
 Claude's permission prompts and is appropriate only inside a separately isolated environment; it

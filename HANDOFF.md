@@ -275,6 +275,11 @@ Background launchers create a real Claude Code session; use the printed short ID
 Claude's prompts and must be limited to an independently isolated environment. None of these modes
 bypass cc-assistant's approval ledger.
 
+The launcher always passes an explicit controller settings file. Both controller profiles enable
+the checkout's declared project MCP server, allowing background sessions to start without waiting
+at Claude Code's interactive project-MCP trust prompt. Review `.mcp.json` before launching from an
+untrusted checkout.
+
 The sandbox launcher enables Claude Code's built-in sandbox, denies credential paths and secret
 environment variables, blocks reads of `.data` and `.env`, refuses unsandboxed retries, and fails
 if the sandbox is unavailable. On Linux/WSL it needs `bubblewrap` and `socat`.

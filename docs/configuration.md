@@ -3,9 +3,11 @@
 cc-assistant is configured through environment variables. The repository's `.env.example` is a reference file; the current scripts do not automatically load `.env`. Export values in the shell or configure them in the process supervisor before starting the daemon, CLI, MCP bridge, or installer.
 
 Claude Code controller settings are separate from daemon environment variables. The shared hook
-configuration lives in `.claude/settings.json`; strict opt-in sandbox settings live in
-`.claude/controller-sandbox.settings.json` and are applied only by `pnpm controller:sandbox`
-through Claude Code's `--settings` flag. See [the controller-session guide](controller-session.md).
+configuration lives in `.claude/settings.json`. The launchers pass either
+`.claude/controller.settings.json` or the strict opt-in
+`.claude/controller-sandbox.settings.json` through Claude Code's `--settings` flag. Both explicitly
+enable only the project MCP servers declared by this checkout so non-interactive background starts
+do not wait at a trust prompt. See [the controller-session guide](controller-session.md).
 Background controller launchers select Claude Code permission modes with CLI arguments rather than
 daemon environment variables; `manual` is the default, with explicit `auto` and
 `bypassPermissions` profiles.
