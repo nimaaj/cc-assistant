@@ -66,6 +66,35 @@ describe("Claude session control service", () => {
     repository.close();
   });
 
+  it("routes dispatcher input to the newest live main controller with a structured envelope", async () => {
+    const controllerInventory = [
+      { ...inventory[0], id: "old11111", sessionId: "old11111-0000-4000-8000-000000000000", name: "cc-assistant-controller", startedAt: 10 },
+      { ...inventory[0], id: "new22222", sessionId: "new22222-0000-4000-8000-000000000000", name: "cc-assistant-controller", startedAt: 20 },
+    ];
+    const runner: ClaudeCliRunner = async () => ({ stdout: JSON.stringify(controllerInventory), stderr: "" });
+    const { repository, service } = setup(runner);
+    const proposed = await service.proposeDispatcher({
+      input: "Remember the Linux version and environment here.",
+      source: "web",
+      context: {},
+    });
+
+    expect(proposed.target.id).toBe("new22222");
+    expect(proposed.approval).toMatchObject({
+      actionType: "claude_session_control",
+      payload: {
+        dispatcher: {
+          source: "web",
+          request: "Remember the Linux version and environment here.",
+        },
+      },
+    });
+    const envelope = String((proposed.approval.payload as { message: unknown }).message);
+    expect(envelope).toContain("CC_ASSISTANT_DISPATCH_V1");
+    expect(envelope).toContain("Remember the Linux version and environment here.");
+    repository.close();
+  });
+
   it("targets lifecycle commands by the resolved background short ID", async () => {
     const runner: ClaudeCliRunner = async () => ({ stdout: JSON.stringify(inventory), stderr: "" });
     const { repository, service } = setup(runner);

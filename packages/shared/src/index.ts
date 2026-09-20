@@ -148,6 +148,16 @@ export const ClaudeSessionControlSchema = z.discriminatedUnion("action", [
 ]);
 export type ClaudeSessionControlInput = z.input<typeof ClaudeSessionControlSchema>;
 
+export const DispatcherSourceSchema = z.enum(["web", "schedule", "system_notification", "api"]);
+export type DispatcherSource = z.infer<typeof DispatcherSourceSchema>;
+export const DispatcherRequestSchema = z.object({
+  input: z.string().trim().min(1).max(100_000),
+  target: ClaudeSessionTargetSchema.optional(),
+  source: DispatcherSourceSchema.default("web"),
+  context: z.record(z.string(), z.unknown()).default({}),
+}).strict();
+export type DispatcherRequest = z.input<typeof DispatcherRequestSchema>;
+
 export const ClaudeHookInputSchema = z
   .object({
     session_id: z.string().min(1),
@@ -260,7 +270,7 @@ export type ResolveApprovalInput = z.infer<typeof ResolveApprovalSchema>;
 export const scheduleTriggerKinds = ["at", "interval", "system_notification"] as const;
 export const ScheduleTriggerKindSchema = z.enum(scheduleTriggerKinds);
 export type ScheduleTriggerKind = z.infer<typeof ScheduleTriggerKindSchema>;
-export const scheduleActionKinds = ["reminder", "agent", "command", "ability"] as const;
+export const scheduleActionKinds = ["reminder", "agent", "command", "ability", "dispatcher"] as const;
 export const ScheduleActionKindSchema = z.enum(scheduleActionKinds);
 export type ScheduleActionKind = z.infer<typeof ScheduleActionKindSchema>;
 
@@ -286,6 +296,10 @@ const AbilityActionSchema = z.object({
   input: z.record(z.string(), z.unknown()).default({}),
   taskId: z.uuid().optional(),
 }).strict();
+const DispatcherActionSchema = z.object({
+  request: z.string().trim().min(1).max(100_000),
+  target: ClaudeSessionTargetSchema.optional(),
+}).strict();
 
 function addNestedValidationIssue(
   result: z.ZodSafeParseResult<unknown>,
@@ -308,7 +322,8 @@ function validateScheduleConfiguration(
     value.triggerKind === "interval" ? IntervalTriggerSchema : SystemNotificationTriggerSchema;
   const actionSchema = value.actionKind === "reminder" ? ReminderActionSchema :
     value.actionKind === "agent" ? StartAgentRunSchema :
-    value.actionKind === "command" ? ProposeCommandSchema : AbilityActionSchema;
+    value.actionKind === "command" ? ProposeCommandSchema :
+    value.actionKind === "ability" ? AbilityActionSchema : DispatcherActionSchema;
   addNestedValidationIssue(triggerSchema.safeParse(value.trigger), "trigger", context);
   addNestedValidationIssue(actionSchema.safeParse(value.action), "action", context);
 }

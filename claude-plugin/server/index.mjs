@@ -19847,6 +19847,13 @@ var ClaudeSessionControlSchema = external_exports.discriminatedUnion("action", [
     permissionMode: ClaudePermissionModeSchema.default("manual")
   }).strict()
 ]);
+var DispatcherSourceSchema = external_exports.enum(["web", "schedule", "system_notification", "api"]);
+var DispatcherRequestSchema = external_exports.object({
+  input: external_exports.string().trim().min(1).max(1e5),
+  target: ClaudeSessionTargetSchema.optional(),
+  source: DispatcherSourceSchema.default("web"),
+  context: external_exports.record(external_exports.string(), external_exports.unknown()).default({})
+}).strict();
 var ClaudeHookInputSchema = external_exports.object({
   session_id: external_exports.string().min(1),
   transcript_path: external_exports.string().optional(),
@@ -19936,7 +19943,7 @@ var ResolveApprovalSchema = external_exports.object({
 });
 var scheduleTriggerKinds = ["at", "interval", "system_notification"];
 var ScheduleTriggerKindSchema = external_exports.enum(scheduleTriggerKinds);
-var scheduleActionKinds = ["reminder", "agent", "command", "ability"];
+var scheduleActionKinds = ["reminder", "agent", "command", "ability", "dispatcher"];
 var ScheduleActionKindSchema = external_exports.enum(scheduleActionKinds);
 var AtTriggerSchema = external_exports.object({ at: external_exports.iso.datetime() }).strict();
 var IntervalTriggerSchema = external_exports.object({
@@ -19960,6 +19967,10 @@ var AbilityActionSchema = external_exports.object({
   input: external_exports.record(external_exports.string(), external_exports.unknown()).default({}),
   taskId: external_exports.uuid().optional()
 }).strict();
+var DispatcherActionSchema = external_exports.object({
+  request: external_exports.string().trim().min(1).max(1e5),
+  target: ClaudeSessionTargetSchema.optional()
+}).strict();
 function addNestedValidationIssue(result, path, context) {
   if (result.success)
     return;
@@ -19971,7 +19982,7 @@ function addNestedValidationIssue(result, path, context) {
 }
 function validateScheduleConfiguration(value, context) {
   const triggerSchema = value.triggerKind === "at" ? AtTriggerSchema : value.triggerKind === "interval" ? IntervalTriggerSchema : SystemNotificationTriggerSchema;
-  const actionSchema = value.actionKind === "reminder" ? ReminderActionSchema : value.actionKind === "agent" ? StartAgentRunSchema : value.actionKind === "command" ? ProposeCommandSchema : AbilityActionSchema;
+  const actionSchema = value.actionKind === "reminder" ? ReminderActionSchema : value.actionKind === "agent" ? StartAgentRunSchema : value.actionKind === "command" ? ProposeCommandSchema : value.actionKind === "ability" ? AbilityActionSchema : DispatcherActionSchema;
   addNestedValidationIssue(triggerSchema.safeParse(value.trigger), "trigger", context);
   addNestedValidationIssue(actionSchema.safeParse(value.action), "action", context);
 }

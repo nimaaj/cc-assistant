@@ -4,6 +4,15 @@ import type { DaemonConfig } from "./config.js";
 import { ExecutionService } from "./execution-service.js";
 import type { NativeAdapter } from "./native-service.js";
 
+export interface DispatcherAdapter {
+  proposeDispatcher(input: {
+    input: string;
+    target?: string;
+    source: "schedule" | "system_notification";
+    context: Record<string, unknown>;
+  }): Promise<unknown>;
+}
+
 function stringField(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) throw new Error(`${name} must be a string`);
   return value;
@@ -42,14 +51,16 @@ export class AutomationService {
   readonly #execution: ExecutionService;
   readonly #native: NativeAdapter;
   readonly #config: DaemonConfig;
+  readonly #dispatcher: DispatcherAdapter | undefined;
   #timer?: NodeJS.Timeout;
   readonly #firing = new Set<string>();
 
-  constructor(repository: AssistantRepository, execution: ExecutionService, native: NativeAdapter, config: DaemonConfig) {
+  constructor(repository: AssistantRepository, execution: ExecutionService, native: NativeAdapter, config: DaemonConfig, dispatcher?: DispatcherAdapter) {
     this.#repository = repository;
     this.#execution = execution;
     this.#native = native;
     this.#config = config;
+    this.#dispatcher = dispatcher;
   }
 
   start(): void {
@@ -101,6 +112,20 @@ export class AutomationService {
         this.invokeAbility(stringField(schedule.action.abilityId, "action.abilityId"),
           (schedule.action.input ?? {}) as Record<string, unknown>,
           typeof schedule.action.taskId === "string" ? schedule.action.taskId : undefined);
+      } else if (schedule.actionKind === "dispatcher") {
+        if (!this.#dispatcher) throw new Error("Dispatcher integration is unavailable");
+        await this.#dispatcher.proposeDispatcher({
+          input: stringField(schedule.action.request, "action.request"),
+          ...(typeof schedule.action.target === "string" ? { target: schedule.action.target } : {}),
+          source: schedule.triggerKind === "system_notification" ? "system_notification" : "schedule",
+          context: {
+            scheduleId: schedule.id,
+            scheduleName: schedule.name,
+            triggerKind: schedule.triggerKind,
+            trigger: schedule.trigger,
+            firedAt: ranAt,
+          },
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

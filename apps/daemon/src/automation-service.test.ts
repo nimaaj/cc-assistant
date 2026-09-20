@@ -98,4 +98,42 @@ describe("AutomationService", () => {
     assistant.close();
     executionRepository.close();
   });
+
+  it("routes scheduled dispatcher actions through the main controller approval path", async () => {
+    const databasePath = join(tmpdir(), `cc-automation-dispatcher-${randomUUID()}.sqlite`);
+    paths.push(databasePath);
+    new TaskRepository(databasePath).close();
+    const assistant = new AssistantRepository(databasePath);
+    const executionRepository = new ExecutionRepository(databasePath);
+    const config: DaemonConfig = {
+      host: "127.0.0.1", port: 4317, dataDir: tmpdir(), databasePath,
+      accessToken: "test-token-with-at-least-thirty-two-characters", accessTokenPath: "unused",
+      allowedRoots: [tmpdir()],
+    };
+    const requests: unknown[] = [];
+    const automation = new AutomationService(
+      assistant,
+      new ExecutionService(executionRepository, config),
+      { notify: async () => {}, readClipboardImage: async () => ({ mimeType: "image/png", base64: "" }) },
+      config,
+      { proposeDispatcher: async (input) => { requests.push(input); } },
+    );
+    const schedule = assistant.createSchedule({
+      name: "Environment inventory",
+      triggerKind: "at",
+      trigger: { at: new Date(Date.now() - 1_000).toISOString() },
+      actionKind: "dispatcher",
+      action: { request: "Inventory this machine and update the environment memory." },
+    });
+
+    await automation.tick();
+    expect(requests).toEqual([expect.objectContaining({
+      input: "Inventory this machine and update the environment memory.",
+      source: "schedule",
+      context: expect.objectContaining({ scheduleId: schedule.id, scheduleName: schedule.name }),
+    })]);
+    expect(assistant.getSchedule(schedule.id)).toMatchObject({ enabled: false, nextRunAt: null });
+    assistant.close();
+    executionRepository.close();
+  });
 });

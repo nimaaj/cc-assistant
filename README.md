@@ -35,7 +35,7 @@ For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md
 - Claude Code MCP tools for every capability above.
 - Claude Code lifecycle hooks and live session-state tracking.
 - A developer CLI for state inspection, mutation, export, and raw API calls.
-- A responsive dashboard for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
+- A two-view responsive dashboard: a single-field dispatcher with compact status panes, plus the full workspace for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
 
 ## Requirements
 
@@ -67,6 +67,13 @@ command equivalent and the lockfile policy.
 In development, the daemon listens on `127.0.0.1:4317` and Vite serves the hot-reloading dashboard on [http://127.0.0.1:4318](http://127.0.0.1:4318).
 
 On first launch, the daemon generates `.data/access-token`. Paste its contents into the dashboard login screen. The browser receives an HTTP-only, same-site cookie; the token is not stored in browser JavaScript storage.
+
+The dashboard opens on **Simplified**. Its dispatcher routes a natural-language outcome to the
+newest live `cc-assistant-controller`; delivery first appears as an exact one-time approval. The
+controller can gather missing context, call a direct tool, or delegate structured multi-step work.
+Use **Full workspace** for all explicit controls and the developer State studio. See the
+[dispatcher guide](docs/dispatcher.md) for the envelope, result contract, pane statuses, and
+trigger integration.
 
 After building and starting the daemon, run the read-only readiness check:
 

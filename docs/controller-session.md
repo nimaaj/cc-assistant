@@ -17,9 +17,9 @@ prompts/controller.md
                 └── claude-plugin/skills/controller/SKILL.md
 ```
 
-- `prompts/controller.md` defines controller activation, startup, task state, delegation,
-  approvals, commands, browser jobs, triggers, memory, session monitoring, recovery, and
-  completion behavior.
+- `prompts/controller.md` defines controller activation, startup, dispatcher envelopes and
+  structured results, task state, delegation, approvals, commands, browser jobs, triggers,
+  memory, session monitoring, recovery, and completion behavior.
 - `AGENTS.md` adds repository commands and engineering conventions in an agent-neutral file.
 - `CLAUDE.md` imports `AGENTS.md` and adds Claude Code-specific integration notes.
 - The plugin skill exposes the same prompt as `/cc-assistant:controller` in a Claude session

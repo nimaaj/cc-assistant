@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createBrowserJob,
   createSchedule,
+  dispatchInput,
   installAbility,
   listAbilities,
   proposeCommand,
@@ -51,6 +52,18 @@ describe("web API client", () => {
         args: ["status", "--short"],
         cwd: "/workspace/project",
       }),
+    }));
+  });
+
+  it("sends dispatcher input without inventing controller context", async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ accepted: true }, 202));
+    vi.stubGlobal("fetch", fetch);
+
+    await dispatchInput("Remember the Linux version and environment here.");
+
+    expect(fetch).toHaveBeenCalledWith("/api/dispatcher", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ input: "Remember the Linux version and environment here." }),
     }));
   });
 

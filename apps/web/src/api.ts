@@ -84,6 +84,13 @@ export async function controlClaudeSession(input: ClaudeSessionControlInput): Pr
   await request("/api/claude/sessions/control", { method: "POST", body: JSON.stringify(input) });
 }
 
+export async function dispatchInput(input: string, target?: string): Promise<void> {
+  await request("/api/dispatcher", {
+    method: "POST",
+    body: JSON.stringify({ input, ...(target ? { target } : {}) }),
+  });
+}
+
 export async function listRuns(): Promise<Run[]> {
   return RunListSchema.parse(await request("/api/runs")).runs;
 }

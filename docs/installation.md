@@ -136,6 +136,12 @@ cat .data/access-token
 
 Paste it into the dashboard login screen. The dashboard exchanges it for an HTTP-only, same-site cookie; it does not keep the bearer token in browser JavaScript storage.
 
+The dashboard defaults to **Simplified**, with one dispatcher input and horizontally expanding
+status panes. **Full workspace** retains every explicit control from the original layout. The
+dispatcher requires a live session named `cc-assistant-controller`; start one with
+`pnpm controller:bg`, then approve dispatcher deliveries from the attention row. See
+[Simplified dashboard and dispatcher](dispatcher.md).
+
 If `.data/access-token` does not exist, confirm that the daemon started successfully and that `CC_ASSISTANT_DATA_DIR` points to the same directory used by the daemon.
 
 ## 6. Connect Claude Code

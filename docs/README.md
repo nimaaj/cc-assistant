@@ -16,6 +16,7 @@ This directory is the source of truth for operating, extending, and handing over
 | Explore the knowledge-base data flow | [Knowledge-base flowchart](diagrams/cc-knowledge-base-swimlane-flow.html) |
 | Explore the runtime request and automation lifecycle | [Interactive runtime flow](diagrams/cc-assistant-runtime-flow.html) |
 | Run the controlling Claude session or enable strict sandbox mode | [Claude controller session](controller-session.md) |
+| Use the simplified UI and understand dispatcher routing | [Simplified dashboard and dispatcher](dispatcher.md) |
 | Manage and orchestrate local Claude Code sessions | [Claude session orchestration](claude-session-orchestration.md) |
 | Work on the codebase | [Development guide](development.md) |
 | See implemented and verified capabilities | [Completion audit](completion-audit.md) |
@@ -27,6 +28,7 @@ This directory is the source of truth for operating, extending, and handing over
 - `installation.md`, `package-managers.md`, `configuration.md`, `development.md`, and `memory.md` describe the current repository.
 - `architecture.md` records current runtime boundaries and invariants.
 - `controller-session.md` records controller prompt loading and the opt-in Claude Code sandbox policy.
+- `dispatcher.md` records the simplified view, dispatch envelope, result contract, and triggered dispatch lifecycle.
 - `completion-audit.md` separates implemented code from environment-dependent live verification.
 - `roadmap.md` is the concise backlog. Detailed designs live under `handover/`.
 - `build-memory-system-prompt.md` is retained as historical implementation context. Its lexical/wiki-memory scope is complete; it is not an active task list.

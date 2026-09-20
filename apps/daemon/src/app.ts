@@ -8,6 +8,7 @@ import {
   BrowserJobRequestSchema,
   ClaudeSessionControlSchema,
   CreateMemorySchema,
+  DispatcherRequestSchema,
   IngestMemorySchema,
   MemoryImportPlanSchema,
   MemoryMarkdownExportSchema,
@@ -204,7 +205,7 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     new MemoryRepository(dependencies.config.databasePath, (event) => eventHub.publish(event));
   const webRoot = resolve(dependencies.webRoot ?? resolve(import.meta.dirname, "../../web/dist"));
   const automationService = dependencies.automationService ??
-    new AutomationService(assistantRepository, executionService, nativeService, dependencies.config);
+    new AutomationService(assistantRepository, executionService, nativeService, dependencies.config, claudeSessionControlService);
   const browserAutomationService = dependencies.browserAutomationService ??
     new BrowserAutomationService(assistantRepository, executionRepository, dependencies.config, dependencies.browserAgentQuery);
   automationService.start();
@@ -400,6 +401,16 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
 
   app.post("/api/claude/sessions/control", async (request, reply) => {
     const proposed = await claudeSessionControlService.propose(ClaudeSessionControlSchema.parse(request.body));
+    return reply.code(202).send(proposed);
+  });
+
+  app.post("/api/dispatcher", async (request, reply) => {
+    const input = DispatcherRequestSchema.parse({
+      ...z.object({ input: z.string(), target: z.string().optional() }).parse(request.body),
+      source: "web",
+      context: {},
+    });
+    const proposed = await claudeSessionControlService.proposeDispatcher(input);
     return reply.code(202).send(proposed);
   });
 

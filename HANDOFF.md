@@ -248,6 +248,14 @@ The web dashboard includes a developer-facing **State studio** with an aggregate
 a validated raw `/api/*` console. It never edits SQLite directly. The CLI remains the scriptable
 state interface and also exposes memory export/import.
 
+The dashboard defaults to a **Simplified** tab with one dispatcher field and horizontally expanding
+status panes; the original complete interface remains under **Full workspace**. Dispatcher requests
+select the newest live `cc-assistant-controller`, enter the existing cross-session approval path,
+and arrive as `CC_ASSISTANT_DISPATCH_V1` envelopes. Time and notification triggers can use the
+`dispatcher` action kind, but cannot approve their own delivery. The canonical decomposition,
+subtask, and structured-result contract lives in `prompts/controller.md`; operational details are
+in `docs/dispatcher.md`.
+
 ### Abilities and native helpers
 
 Ability manifests are strict, versioned, data-only contracts. Installation does not grant
@@ -386,13 +394,14 @@ CC_ASSISTANT_DATA_DIR=.data node scripts/mcp-smoke.mjs
 
 At the last completed feature handoff:
 
-- 18 test files and 54 tests passed;
+- 19 test files and 63 tests passed;
 - all workspace TypeScript checks passed;
 - the production Vite build passed;
 - the plugin bundle built and strict validation passed;
 - a live `claude agents --json --all` inventory worked;
 - an injected session-control proposal/denial API smoke passed; and
-- the local dashboard rendered the orchestration controls with no console warnings or errors.
+- the local dashboard rendered both the simplified dispatcher/status-pane view and the full
+  workspace; horizontal pane expansion was visually verified with no console errors.
 
 The repository has dedicated workspace runners for both pnpm and npm and commits both lockfiles.
 Do not alternate managers against one `node_modules` tree. Dependency changes must refresh and

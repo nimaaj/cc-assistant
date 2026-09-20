@@ -55,6 +55,7 @@ import {
   updateSchedule,
   updateTask,
 } from "./api.js";
+import { SimplifiedView } from "./SimplifiedView.js";
 
 const statusLabels: Record<TaskStatus, string> = {
   inbox: "Inbox",
@@ -542,7 +543,8 @@ function TriggerWorkspace({
     ? { title: "Assistant reminder", body: "" }
     : kind === "agent" ? { title: "Scheduled agent", prompt: "Describe the task", cwd: defaultCwd }
       : kind === "command" ? { title: "Scheduled command", executable: "git", args: ["status"], cwd: defaultCwd }
-        : { abilityId: abilities[0]?.id ?? "say-hello", input: {} };
+        : kind === "ability" ? { abilityId: abilities[0]?.id ?? "say-hello", input: {} }
+          : { request: "Describe what the main controller should handle" };
 
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault(); setBusy("create"); setError(undefined);
@@ -567,7 +569,7 @@ function TriggerWorkspace({
         <input aria-label="Trigger name" placeholder="Trigger name" value={name} onChange={(event) => setName(event.target.value)} />
         <div className="inline-fields">
           <label>When<select value={triggerKind} onChange={(event) => { const value = event.target.value as ScheduleTriggerKind; setTriggerKind(value); setTriggerJson(JSON.stringify(triggerTemplate(value), null, 2)); }}><option value="at">At a time</option><option value="interval">On an interval</option><option value="system_notification">macOS notification</option></select></label>
-          <label>Do<select value={actionKind} onChange={(event) => { const value = event.target.value as ScheduleActionKind; setActionKind(value); setActionJson(JSON.stringify(actionTemplate(value), null, 2)); }}><option value="reminder">Send reminder</option><option value="agent">Start agent</option><option value="command">Propose command</option><option value="ability">Invoke ability</option></select></label>
+          <label>Do<select value={actionKind} onChange={(event) => { const value = event.target.value as ScheduleActionKind; setActionKind(value); setActionJson(JSON.stringify(actionTemplate(value), null, 2)); }}><option value="reminder">Send reminder</option><option value="agent">Start agent</option><option value="command">Propose command</option><option value="ability">Invoke ability</option><option value="dispatcher">Prompt dispatcher</option></select></label>
         </div>
         <label>Trigger configuration<textarea className="json-input" value={triggerJson} onChange={(event) => setTriggerJson(event.target.value)} /></label>
         <label>Action configuration<textarea className="json-input" value={actionJson} onChange={(event) => setActionJson(event.target.value)} /></label>
@@ -793,6 +795,7 @@ export default function App(): React.JSX.Element {
   });
   const [authenticated, setAuthenticated] = useState<boolean>();
   const [error, setError] = useState<string>();
+  const [view, setView] = useState<"simplified" | "workspace">("simplified");
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -853,7 +856,7 @@ export default function App(): React.JSX.Element {
       <header>
         <div>
           <p className="eyebrow">Personal workspace</p>
-          <h1>What are we working on?</h1>
+          <h1>{view === "simplified" ? "What should I handle?" : "What are we working on?"}</h1>
         </div>
         <div className="header-meta">
           <span
@@ -870,8 +873,28 @@ export default function App(): React.JSX.Element {
         </div>
       </header>
 
-      <NewTask onCreated={() => void refresh()} />
+      <nav className="view-tabs" aria-label="Dashboard views">
+        <button className={view === "simplified" ? "selected" : ""} aria-current={view === "simplified" ? "page" : undefined} onClick={() => setView("simplified")}>Simplified</button>
+        <button className={view === "workspace" ? "selected" : ""} aria-current={view === "workspace" ? "page" : undefined} onClick={() => setView("workspace")}>Full workspace</button>
+      </nav>
+
       {error ? <p className="error banner">{error}</p> : null}
+
+      {view === "simplified" ? <SimplifiedView
+        tasks={tasks}
+        sessions={claudeAgentSessions}
+        runs={runs}
+        approvals={approvals}
+        notifications={notifications}
+        schedules={schedules}
+        memories={memories}
+        abilities={abilities}
+        browserJobs={browserJobs}
+        browserStatus={browserStatus}
+        onChange={() => void refresh()}
+      /> : <>
+
+      <NewTask onCreated={() => void refresh()} />
       <NotificationInbox notifications={notifications} onChange={() => void refresh()} />
 
       <AssistantTools schedules={schedules} memories={memories} defaultCwd={defaultCwd} onChange={() => void refresh()} />
@@ -915,6 +938,7 @@ export default function App(): React.JSX.Element {
           </div>
         ))}
       </section>
+      </>}
     </main>
   );
 }
