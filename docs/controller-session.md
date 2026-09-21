@@ -58,7 +58,8 @@ pnpm controller
 The launcher:
 
 1. fixes the working directory to the cc-assistant checkout;
-2. names the session `cc-assistant-controller`;
+2. names an interactive session `cc-assistant-controller`; background launchers append a generated
+   suffix so cross-session messages remain unambiguous when older controllers still exist;
 3. loads `.claude/controller.settings.json`, which explicitly enables this checkout's committed
    project MCP servers for non-interactive and background startup;
 4. sends a read-only controller bootstrap prompt;
@@ -86,6 +87,12 @@ ID; `claude attach` then opens Claude Code's own interactive terminal for that s
 pnpm controller:bg
 claude attach <id>
 ```
+
+Each background launch receives a name such as
+`cc-assistant-controller-mgpl4v6f-7ka`. The dispatcher recognizes the stable prefix and selects the
+newest uniquely named live controller. Do not override multiple controllers with the same display
+name: Claude's `ListAgents` refs are not the full session IDs returned by `claude agents --json`, so
+the supported `SendMessage` path cannot safely disambiguate duplicate names.
 
 Background sessions cannot answer Claude Code's first-run project MCP trust prompt. The launcher
 therefore passes `.claude/controller.settings.json` with `--settings`. That file enables the MCP

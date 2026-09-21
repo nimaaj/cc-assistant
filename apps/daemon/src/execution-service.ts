@@ -35,6 +35,7 @@ export interface SessionControlCommand {
   cwd: string;
   payload: Record<string, unknown>;
   timeoutMs?: number;
+  resultProtocol?: "claude_delivery_v1";
 }
 
 const SECRET_ENV_NAME = /(TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|AUTH|COOKIE|SESSION|BEARER|(^|_)PAT($|_)|SSH_)/i;
@@ -73,6 +74,48 @@ function textFromAssistantMessage(message: SDKMessage): string[] {
     }
     return [];
   });
+}
+
+interface ClaudePrintResult {
+  is_error?: unknown;
+  subtype?: unknown;
+  result?: unknown;
+}
+
+interface ClaudeDeliveryResult {
+  version?: unknown;
+  delivered?: unknown;
+  target?: unknown;
+  summary?: unknown;
+}
+
+export function parseClaudeDeliveryOutput(stdout: string): string {
+  let outer: ClaudePrintResult;
+  try {
+    outer = JSON.parse(stdout.trim()) as ClaudePrintResult;
+  } catch {
+    throw new Error("Claude message delivery returned invalid JSON");
+  }
+  if (outer.is_error === true || outer.subtype !== "success" || typeof outer.result !== "string") {
+    throw new Error("Claude message delivery did not return a successful terminal result");
+  }
+  const match = outer.result.match(
+    /<cc_assistant_delivery_result>\s*([\s\S]*?)\s*<\/cc_assistant_delivery_result>/,
+  );
+  if (!match?.[1]) throw new Error("Claude message delivery did not return a delivery receipt");
+
+  let receipt: ClaudeDeliveryResult;
+  try {
+    receipt = JSON.parse(match[1]) as ClaudeDeliveryResult;
+  } catch {
+    throw new Error("Claude message delivery returned an invalid delivery receipt");
+  }
+  if (receipt.version !== 1 || typeof receipt.delivered !== "boolean" || typeof receipt.summary !== "string") {
+    throw new Error("Claude message delivery returned an incomplete delivery receipt");
+  }
+  const summary = receipt.summary.trim() || "Claude did not explain the delivery result";
+  if (!receipt.delivered) throw new Error(`Claude message delivery failed: ${summary}`);
+  return summary;
 }
 
 export class ExecutionInputError extends Error {}
@@ -164,6 +207,7 @@ export class ExecutionService {
         timeoutMs,
         env: {},
         sessionControlAction: input.action,
+        resultProtocol: input.resultProtocol ?? null,
       },
     });
     const approval = this.#repository.createApproval({
@@ -291,11 +335,11 @@ export class ExecutionService {
     this.#active.set(run.id, { abort });
     this.#repository.updateRun(run.id, { status: "running", startedAt: new Date().toISOString() });
     this.#repository.appendLog(run.id, "info", `Starting ${basename(executable)}`, { args });
+    let stdout = "";
+    let stderr = "";
 
     try {
       await new Promise<void>((resolvePromise, reject) => {
-        let stdout = "";
-        let stderr = "";
         let timedOut = false;
         let forceTimer: NodeJS.Timeout | undefined;
         const child = spawn(executable, args, {
@@ -337,9 +381,12 @@ export class ExecutionService {
           else reject(new Error(`Command exited with code ${code ?? "null"} (${signal ?? "no signal"})`));
         });
       });
+      const result = run.metadata.resultProtocol === "claude_delivery_v1"
+        ? parseClaudeDeliveryOutput(stdout)
+        : "Command completed successfully";
       this.#repository.updateRun(run.id, {
         status: "succeeded",
-        result: "Command completed successfully",
+        result,
         completedAt: new Date().toISOString(),
       });
     } catch (error) {

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const projectRoot = resolve(import.meta.dirname, "../../..");
 // @ts-ignore The launcher is an executable JavaScript module with intentionally exported test seams.
 const { buildControllerLaunch } = await import("../../../scripts/start-controller.mjs") as {
-  buildControllerLaunch(input: string[]): {
+  buildControllerLaunch(input: string[], identity?: { now: number; pid: number }): {
     args: string[];
     cwd: string;
     settings: string;
@@ -39,11 +39,14 @@ describe("Claude controller launcher", () => {
   });
 
   it("starts an attachable background controller with an explicit permission mode", () => {
-    const output = buildControllerLaunch(["--background", "--permission-mode", "auto", "--dry-run"]);
+    const output = buildControllerLaunch(
+      ["--background", "--permission-mode", "auto", "--dry-run"],
+      { now: 123456789, pid: 4242 },
+    );
     expect(output.background).toBe(true);
     expect(output.permissionMode).toBe("auto");
     expect(output.args).toEqual(expect.arrayContaining([
-      "--bg", "--name", "cc-assistant-controller", "--permission-mode", "auto",
+      "--bg", "--name", "cc-assistant-controller-21i3v9-39u", "--permission-mode", "auto",
     ]));
   });
 

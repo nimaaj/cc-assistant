@@ -2,7 +2,7 @@
 
 This document is the fast, self-contained entry point for another LLM coding agent continuing
 work on cc-assistant. It describes the product intent, implemented system, operating constraints,
-current verification evidence, and unfinished work as of **2026-09-19**.
+current verification evidence, and unfinished work as of **2026-09-21**.
 
 It is a map, not a replacement for the source. Before changing code, read [`AGENTS.md`](AGENTS.md),
 the imported [`prompts/controller.md`](prompts/controller.md), and the source-of-truth document
@@ -17,8 +17,9 @@ then update the stale documentation as part of the change.
   `/home/nima/Documents/codes/all-chat/cc-assistant`
 - On the current Linux machine that path resolves to `/home/nima/code/all-chat/cc-assistant`.
   Avoid treating the two spellings as separate checkouts.
-- Latest functional feature at the time of this handoff: standalone knowledge-base interchange,
-  developer state studio, and native attachable controller sessions with explicit permission modes.
+- Latest functional features at the time of this handoff: reliable uniquely named controller
+  dispatch, plus Simplified-view mouse drag/drop, durable folders and item placement, recoverable
+  task trash, and six color themes.
 - `.data/`, all normal `dist/` directories, dependencies, and local editor metadata are ignored.
   The generated Claude plugin server bundle is the important exception and is committed.
 

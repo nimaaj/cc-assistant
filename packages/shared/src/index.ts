@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+export const MAIN_CONTROLLER_NAME = "cc-assistant-controller";
+
+export function isMainControllerName(name: string | null): boolean {
+  return name === MAIN_CONTROLLER_NAME || name?.startsWith(`${MAIN_CONTROLLER_NAME}-`) === true;
+}
+
 export const taskStatuses = [
   "inbox",
   "planned",
@@ -380,6 +386,77 @@ export type AssistantNotification = z.infer<typeof AssistantNotificationSchema>;
 export const AssistantNotificationListSchema = z.object({
   notifications: z.array(AssistantNotificationSchema),
 });
+
+export const workspaceItemTypes = [
+  "task",
+  "approval",
+  "notification",
+  "claude_session",
+  "run",
+  "schedule",
+  "ability",
+  "browser_job",
+  "memory",
+] as const;
+export const WorkspaceItemTypeSchema = z.enum(workspaceItemTypes);
+export type WorkspaceItemType = z.infer<typeof WorkspaceItemTypeSchema>;
+
+export const workspaceFolderIcons = [
+  "folder",
+  "briefcase",
+  "star",
+  "code",
+  "idea",
+  "rocket",
+  "archive",
+  "heart",
+] as const;
+export const WorkspaceFolderIconSchema = z.enum(workspaceFolderIcons);
+export type WorkspaceFolderIcon = z.infer<typeof WorkspaceFolderIconSchema>;
+
+export const WorkspaceFolderSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  icon: WorkspaceFolderIconSchema,
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  revision: z.number().int().positive(),
+});
+export type WorkspaceFolder = z.infer<typeof WorkspaceFolderSchema>;
+export const WorkspaceFolderListSchema = z.object({ folders: z.array(WorkspaceFolderSchema) });
+
+export const CreateWorkspaceFolderSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  icon: WorkspaceFolderIconSchema.default("folder"),
+}).strict();
+export type CreateWorkspaceFolderInput = z.input<typeof CreateWorkspaceFolderSchema>;
+
+export const UpdateWorkspaceFolderSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  icon: WorkspaceFolderIconSchema.optional(),
+  expectedRevision: z.number().int().positive(),
+}).strict().refine((value) => value.name !== undefined || value.icon !== undefined, {
+  message: "A folder name or icon must be supplied",
+});
+export type UpdateWorkspaceFolderInput = z.infer<typeof UpdateWorkspaceFolderSchema>;
+
+export const WorkspaceItemPlacementSchema = z.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: z.string().min(1).max(500),
+  folderId: z.uuid(),
+  updatedAt: z.iso.datetime(),
+});
+export type WorkspaceItemPlacement = z.infer<typeof WorkspaceItemPlacementSchema>;
+export const WorkspaceItemPlacementListSchema = z.object({
+  placements: z.array(WorkspaceItemPlacementSchema),
+});
+
+export const MoveWorkspaceItemSchema = z.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: z.string().trim().min(1).max(500),
+  folderId: z.uuid().nullable(),
+}).strict();
+export type MoveWorkspaceItemInput = z.infer<typeof MoveWorkspaceItemSchema>;
 
 export const memoryStatuses = ["active", "archived"] as const;
 export const MemoryStatusSchema = z.enum(memoryStatuses);

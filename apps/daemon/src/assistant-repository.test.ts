@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe("assistant repository", () => {
-  it("persists schedules, abilities, notifications, and browser jobs", () => {
+  it("persists schedules, abilities, notifications, browser jobs, and workspace folders", () => {
     const databasePath = join(tmpdir(), `cc-assistant-state-${randomUUID()}.sqlite`);
     paths.push(databasePath);
     let store = new AssistantRepository(databasePath);
@@ -54,12 +54,43 @@ describe("assistant repository", () => {
     const job = store.createBrowserJob("slack", "list_unreads", {});
     expect(store.claimBrowserJob()?.id).toBe(job.id);
     expect(store.completeBrowserJob(job.id, { count: 2 }).status).toBe("succeeded");
+
+    const folder = store.createWorkspaceFolder({ name: "Current project", icon: "code" });
+    expect(store.listWorkspaceFolders()).toMatchObject([{ id: folder.id, name: "Current project", icon: "code" }]);
+    const moved = store.moveWorkspaceItem({ itemType: "task", itemId: randomUUID(), folderId: folder.id });
+    expect(moved).toMatchObject({ itemType: "task", folderId: folder.id });
+    const renamed = store.updateWorkspaceFolder(folder.id, {
+      name: "Active project", icon: "rocket", expectedRevision: folder.revision,
+    });
+    expect(renamed).toMatchObject({ name: "Active project", icon: "rocket", revision: 2 });
+    expect(() => store.updateWorkspaceFolder(folder.id, {
+      name: "Stale update", expectedRevision: folder.revision,
+    })).toThrow("has changed since it was loaded");
     store.close();
     store = new AssistantRepository(databasePath);
     expect(store.listSchedules()).toMatchObject([{ id: schedule.id, enabled: false, revision: 2 }]);
     expect(store.getAbility("say-hello")?.name).toBe("Say hello");
     expect(store.listNotifications()).toHaveLength(1);
     expect(store.getBrowserJob(job.id)?.status).toBe("succeeded");
+    expect(store.getWorkspaceFolder(folder.id)).toMatchObject({ name: "Active project", revision: 2 });
+    expect(store.listWorkspaceItemPlacements()).toHaveLength(1);
+    store.deleteWorkspaceFolder(folder.id);
+    expect(store.listWorkspaceFolders()).toHaveLength(0);
+    expect(store.listWorkspaceItemPlacements()).toHaveLength(0);
+    store.close();
+  });
+
+  it("unfiles items and rejects unknown destination folders", () => {
+    const databasePath = join(tmpdir(), `cc-assistant-state-${randomUUID()}.sqlite`);
+    paths.push(databasePath);
+    const store = new AssistantRepository(databasePath);
+    const folder = store.createWorkspaceFolder({ name: "Later", icon: "archive" });
+    const itemId = randomUUID();
+    store.moveWorkspaceItem({ itemType: "memory", itemId, folderId: folder.id });
+    expect(store.moveWorkspaceItem({ itemType: "memory", itemId, folderId: null })).toBeNull();
+    expect(store.listWorkspaceItemPlacements()).toHaveLength(0);
+    expect(() => store.moveWorkspaceItem({ itemType: "task", itemId, folderId: randomUUID() }))
+      .toThrow("was not found");
     store.close();
   });
 });

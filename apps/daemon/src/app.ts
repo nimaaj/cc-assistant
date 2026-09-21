@@ -13,7 +13,9 @@ import {
   MemoryImportPlanSchema,
   MemoryMarkdownExportSchema,
   MemoryMarkdownImportRequestSchema,
+  MoveWorkspaceItemSchema,
   CreateScheduleSchema,
+  CreateWorkspaceFolderSchema,
   CreateTaskSchema,
   ProposeCommandSchema,
   ResolveApprovalSchema,
@@ -23,11 +25,18 @@ import {
   UpdateMemorySchema,
   UpdateScheduleSchema,
   UpdateTaskSchema,
+  UpdateWorkspaceFolderSchema,
 } from "@cc-assistant/shared";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { z } from "zod";
 import type { DaemonConfig } from "./config.js";
-import { AssistantRepository, ScheduleNotFoundError, ScheduleRevisionConflictError } from "./assistant-repository.js";
+import {
+  AssistantRepository,
+  ScheduleNotFoundError,
+  ScheduleRevisionConflictError,
+  WorkspaceFolderNotFoundError,
+  WorkspaceFolderRevisionConflictError,
+} from "./assistant-repository.js";
 import { AutomationService } from "./automation-service.js";
 import { BrowserAutomationService, type BrowserAgentQuery } from "./browser-automation-service.js";
 import { ClaudeSessionControlService } from "./claude-session-control-service.js";
@@ -242,6 +251,12 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     }
     if (error instanceof ScheduleRevisionConflictError) {
       return reply.code(409).send({ error: "schedule_revision_conflict", message: error.message });
+    }
+    if (error instanceof WorkspaceFolderNotFoundError) {
+      return reply.code(404).send({ error: "workspace_folder_not_found", message: error.message });
+    }
+    if (error instanceof WorkspaceFolderRevisionConflictError) {
+      return reply.code(409).send({ error: "workspace_folder_revision_conflict", message: error.message });
     }
     if (error instanceof ExecutionInputError) {
       return reply.code(400).send({ error: "invalid_execution_request", message: error.message });
@@ -510,6 +525,32 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     assistantRepository.markNotificationRead(id);
     return reply.code(204).send();
   });
+
+  app.get("/api/workspace/folders", async () => ({ folders: assistantRepository.listWorkspaceFolders() }));
+
+  app.post("/api/workspace/folders", async (request, reply) => {
+    const folder = assistantRepository.createWorkspaceFolder(CreateWorkspaceFolderSchema.parse(request.body));
+    return reply.code(201).send({ folder });
+  });
+
+  app.patch("/api/workspace/folders/:id", async (request) => {
+    const { id } = IdParamsSchema.parse(request.params);
+    return { folder: assistantRepository.updateWorkspaceFolder(id, UpdateWorkspaceFolderSchema.parse(request.body)) };
+  });
+
+  app.delete("/api/workspace/folders/:id", async (request, reply) => {
+    const { id } = IdParamsSchema.parse(request.params);
+    assistantRepository.deleteWorkspaceFolder(id);
+    return reply.code(204).send();
+  });
+
+  app.get("/api/workspace/placements", async () => ({
+    placements: assistantRepository.listWorkspaceItemPlacements(),
+  }));
+
+  app.put("/api/workspace/placements", async (request) => ({
+    placement: assistantRepository.moveWorkspaceItem(MoveWorkspaceItemSchema.parse(request.body)),
+  }));
 
   app.post("/api/triggers/system-notification", async (request) => {
     const input = z.object({ app: z.string().optional(), title: z.string().optional(), body: z.string().optional() }).parse(request.body);

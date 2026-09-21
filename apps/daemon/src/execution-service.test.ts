@@ -7,7 +7,7 @@ import type { PermissionResult, SDKMessage } from "@anthropic-ai/claude-agent-sd
 import { afterEach, describe, expect, it } from "vitest";
 import type { DaemonConfig } from "./config.js";
 import { ExecutionRepository } from "./execution-repository.js";
-import { ExecutionService, type AgentQuery } from "./execution-service.js";
+import { ExecutionService, parseClaudeDeliveryOutput, type AgentQuery } from "./execution-service.js";
 import { TaskRepository } from "./task-repository.js";
 
 const paths: string[] = [];
@@ -31,6 +31,23 @@ async function until(check: () => boolean, message: string, attempts = 100): Pro
 }
 
 describe("execution service", () => {
+  it("accepts only a confirmed Claude delivery receipt", () => {
+    expect(parseClaudeDeliveryOutput(JSON.stringify({
+      type: "result", subtype: "success", is_error: false,
+      result: '<cc_assistant_delivery_result>\n{"version":1,"delivered":true,"target":"controller-1","summary":"Message delivered."}\n</cc_assistant_delivery_result>',
+    }))).toBe("Message delivered.");
+  });
+
+  it("turns a semantic Claude delivery refusal into an execution failure", () => {
+    expect(() => parseClaudeDeliveryOutput(JSON.stringify({
+      type: "result", subtype: "success", is_error: false,
+      result: '<cc_assistant_delivery_result>\n{"version":1,"delivered":false,"target":"controller-1","summary":"Target name is ambiguous."}\n</cc_assistant_delivery_result>',
+    }))).toThrow("Claude message delivery failed: Target name is ambiguous.");
+    expect(() => parseClaudeDeliveryOutput(JSON.stringify({
+      type: "result", subtype: "success", is_error: false, result: "No receipt",
+    }))).toThrow("did not return a delivery receipt");
+  });
+
   it("parks a managed Claude tool request until its approval is resolved", async () => {
     const databasePath = join(tmpdir(), `cc-assistant-execution-${randomUUID()}.sqlite`);
     paths.push(databasePath);

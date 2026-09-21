@@ -102,3 +102,6 @@ Environment changes require a daemon restart. MCP-only path changes also require
 | `*.log` | Service helpers | Operational logs; rotate externally if needed |
 
 The daemon is the only supported writer to SQLite. Use the CLI or authenticated API for state changes.
+Simplified-view folder definitions and item membership are included in `assistant.sqlite`.
+The active color theme is intentionally UI-local and stored as `cc-assistant-theme` in browser
+`localStorage`; it contains no credentials or assistant records.

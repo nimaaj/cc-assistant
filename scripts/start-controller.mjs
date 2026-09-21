@@ -52,7 +52,7 @@ async function writeStdout(value) {
   await new Promise((resolveWrite) => process.stdout.write(value, resolveWrite));
 }
 
-export function buildControllerLaunch(input) {
+export function buildControllerLaunch(input, identity = { now: Date.now(), pid: process.pid }) {
   let sandbox = false;
   let background = false;
   let permissionMode = "manual";
@@ -86,13 +86,17 @@ export function buildControllerLaunch(input) {
   const args = [];
   const settings = sandbox ? sandboxSettings : controllerSettings;
   if (background) args.push("--bg");
-  args.push("--name", sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller");
+  const baseName = sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller";
+  const controllerName = background
+    ? `${baseName}-${identity.now.toString(36)}-${identity.pid.toString(36)}`
+    : baseName;
+  args.push("--name", controllerName);
   args.push("--settings", settings);
   args.push("--permission-mode", permissionMode);
   args.push(...passthrough);
   if (!noBootstrap) args.push(bootstrapPrompt);
 
-  return { command: "claude", args, cwd: projectRoot, settings, sandbox, background, permissionMode, dryRun, help };
+  return { command: "claude", args, cwd: projectRoot, settings, sandbox, background, permissionMode, controllerName, dryRun, help };
 }
 
 export async function main(input = process.argv.slice(2)) {

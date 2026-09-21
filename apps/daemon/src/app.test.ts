@@ -306,6 +306,30 @@ describe("daemon API", () => {
     });
     expect(missingMemory.statusCode).toBe(404);
 
+    const createdFolder = await app.inject({
+      method: "POST", url: "/api/workspace/folders", headers: { cookie: cookie as string },
+      payload: { name: "Integration folder", icon: "briefcase" },
+    });
+    expect(createdFolder.statusCode).toBe(201);
+    const folderId = createdFolder.json().folder.id as string;
+    const movedItem = await app.inject({
+      method: "PUT", url: "/api/workspace/placements", headers: { cookie: cookie as string },
+      payload: { itemType: "task", itemId: created.json().task.id, folderId },
+    });
+    expect(movedItem.json().placement).toMatchObject({ itemType: "task", folderId });
+    const listedFolders = await app.inject({
+      method: "GET", url: "/api/workspace/folders", headers: { cookie: cookie as string },
+    });
+    expect(listedFolders.json().folders).toMatchObject([{ id: folderId, icon: "briefcase" }]);
+    const deletedFolder = await app.inject({
+      method: "DELETE", url: `/api/workspace/folders/${folderId}`, headers: { cookie: cookie as string },
+    });
+    expect(deletedFolder.statusCode).toBe(204);
+    const listedPlacements = await app.inject({
+      method: "GET", url: "/api/workspace/placements", headers: { cookie: cookie as string },
+    });
+    expect(listedPlacements.json().placements).toEqual([]);
+
     await app.close();
     rmSync(databasePath, { force: true });
     rmSync(`${databasePath}-shm`, { force: true });

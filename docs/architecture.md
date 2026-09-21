@@ -39,7 +39,7 @@ Calendar observations feed the assistant's own durable reminder scheduler. The b
 
 ## Persisted entities
 
-The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, and append-only `events`.
+The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, `workspace_folders`, `workspace_item_placements`, and append-only `events`.
 
 All mutable entities use revisions or internal queue claims where concurrent actors may update them.
 
@@ -54,6 +54,12 @@ named main controller from Claude Code's supported session inventory, creates a 
 cross-session approval, and only delivers the versioned request envelope after approval. Scheduled
 and system-notification dispatches use the same path. The controller—not the web client—performs
 context gathering, direct tool selection, decomposition, delegation, and final result synthesis.
+
+Simplified-view folder membership is presentation metadata, but it is durable shared state so it
+survives reloads and can be inspected through the API and State studio. Dragging a task to Trash
+uses the ordinary revision-safe task transition to `cancelled` and removes its folder placement;
+it never hard-deletes the task. Color theme choice is the exception: it is a per-browser
+`localStorage` preference because it has no assistant-state meaning.
 
 ## Memory data ownership
 

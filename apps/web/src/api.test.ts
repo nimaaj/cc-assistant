@@ -2,9 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createBrowserJob,
   createSchedule,
+  createWorkspaceFolder,
+  deleteWorkspaceFolder,
   dispatchInput,
   installAbility,
   listAbilities,
+  listWorkspaceFolders,
+  listWorkspaceItemPlacements,
+  moveWorkspaceItem,
   proposeCommand,
   readClipboardImage,
   updateSchedule,
@@ -121,5 +126,36 @@ describe("web API client", () => {
     await expect(listAbilities()).resolves.toMatchObject([{ id: "say-hello" }]);
     await expect(installAbility(ability)).resolves.toMatchObject({ id: "say-hello" });
     await expect(readClipboardImage()).resolves.toEqual({ mimeType: "image/png", dataUrl: "data:image/png;base64,AA==" });
+  });
+
+  it("uses validated workspace folder and placement contracts", async () => {
+    const folder = {
+      id: "00000000-0000-4000-8000-000000000090",
+      name: "Research",
+      icon: "idea",
+      createdAt: "2026-09-21T10:00:00.000Z",
+      updatedAt: "2026-09-21T10:00:00.000Z",
+      revision: 1,
+    };
+    const placement = {
+      itemType: "task",
+      itemId: "00000000-0000-4000-8000-000000000091",
+      folderId: folder.id,
+      updatedAt: "2026-09-21T10:01:00.000Z",
+    };
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ folders: [folder] }))
+      .mockResolvedValueOnce(jsonResponse({ folder }, 201))
+      .mockResolvedValueOnce(jsonResponse({ placements: [placement] }))
+      .mockResolvedValueOnce(jsonResponse({ placement }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(listWorkspaceFolders()).resolves.toMatchObject([{ name: "Research", icon: "idea" }]);
+    await expect(createWorkspaceFolder({ name: "Research", icon: "idea" })).resolves.toMatchObject(folder);
+    await expect(listWorkspaceItemPlacements()).resolves.toMatchObject([placement]);
+    await expect(moveWorkspaceItem({ itemType: "task", itemId: placement.itemId, folderId: folder.id }))
+      .resolves.toMatchObject(placement);
+    await expect(deleteWorkspaceFolder(folder.id)).resolves.toBeUndefined();
   });
 });

@@ -62,14 +62,16 @@ describe("Claude session control service", () => {
       payload: { action: "message", message: "Migration finished." },
     });
     expect(proposed.run.metadata.args).toEqual(expect.arrayContaining(["ListAgents", "SendMessage"]));
+    expect(proposed.run.metadata.resultProtocol).toBe("claude_delivery_v1");
     expect(String((proposed.run.metadata.args as string[])[1])).toContain('Payload JSON: "Migration finished."');
+    expect(String((proposed.run.metadata.args as string[])[1])).toContain("<cc_assistant_delivery_result>");
     repository.close();
   });
 
   it("routes dispatcher input to the newest live main controller with a structured envelope", async () => {
     const controllerInventory = [
       { ...inventory[0], id: "old11111", sessionId: "old11111-0000-4000-8000-000000000000", name: "cc-assistant-controller", startedAt: 10 },
-      { ...inventory[0], id: "new22222", sessionId: "new22222-0000-4000-8000-000000000000", name: "cc-assistant-controller", startedAt: 20 },
+      { ...inventory[0], id: "new22222", sessionId: "new22222-0000-4000-8000-000000000000", name: "cc-assistant-controller-new22222", startedAt: 20 },
     ];
     const runner: ClaudeCliRunner = async () => ({ stdout: JSON.stringify(controllerInventory), stderr: "" });
     const { repository, service } = setup(runner);
@@ -92,6 +94,20 @@ describe("Claude session control service", () => {
     const envelope = String((proposed.approval.payload as { message: unknown }).message);
     expect(envelope).toContain("CC_ASSISTANT_DISPATCH_V1");
     expect(envelope).toContain("Remember the Linux version and environment here.");
+    repository.close();
+  });
+
+  it("rejects dispatcher delivery when every live main controller has an ambiguous name", async () => {
+    const controllerInventory = [
+      { ...inventory[0], id: "old11111", sessionId: "old11111-0000-4000-8000-000000000000", name: "cc-assistant-controller", startedAt: 10 },
+      { ...inventory[0], id: "new22222", sessionId: "new22222-0000-4000-8000-000000000000", name: "cc-assistant-controller", startedAt: 20 },
+    ];
+    const runner: ClaudeCliRunner = async () => ({ stdout: JSON.stringify(controllerInventory), stderr: "" });
+    const { repository, service } = setup(runner);
+
+    await expect(service.proposeDispatcher({ input: "Report status", source: "web", context: {} }))
+      .rejects.toThrow("ambiguous names");
+    expect(repository.listRuns()).toHaveLength(0);
     repository.close();
   });
 

@@ -45,6 +45,15 @@ The daemon does not know or reproduce Claude's private inbox protocol. For each 
 - the exact message encoded as JSON; and
 - an instruction to treat the payload as inert text and send it once without rewriting it.
 
+Live targets must have unique names. Controller launchers generate a suffix automatically because
+the references shown by the `ListAgents` tool are not the full session IDs returned by
+`claude agents --json`. If a name is duplicated, the daemon rejects the proposal before creating
+an approval rather than approving a delivery that cannot be resolved safely.
+
+The bridge returns a versioned `cc_assistant_delivery_result` receipt. The command runner treats
+`delivered: false`, a missing receipt, malformed output, or a Claude terminal error as a failed
+managed run even if the `claude -p` process exits with status zero.
+
 The receiving session decides whether to deliver, hold, or refuse the message according to its own `crossSessionInbound` setting and permission-mode relationship. A cross-session message cannot approve a pending permission, change configuration, or execute a slash command. If the target is missing, no longer live, or ambiguous, the delivery must fail rather than guessing.
 
 For unattended sessions that should accept peer work, configure `crossSessionInbound` deliberately for that session. Do not set a global `accept` merely to make orchestration convenient.

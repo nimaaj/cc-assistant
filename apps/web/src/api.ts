@@ -14,6 +14,9 @@ import {
   ScheduleListSchema,
   TaskListSchema,
   TaskSchema,
+  WorkspaceFolderListSchema,
+  WorkspaceFolderSchema,
+  WorkspaceItemPlacementListSchema,
   type CreateTaskInput,
   type ClaudeSession,
   type ClaudeAgentSession,
@@ -32,6 +35,11 @@ import {
   type Task,
   type UpdateScheduleInput,
   type UpdateTaskInput,
+  type CreateWorkspaceFolderInput,
+  type MoveWorkspaceItemInput,
+  type UpdateWorkspaceFolderInput,
+  type WorkspaceFolder,
+  type WorkspaceItemPlacement,
 } from "@cc-assistant/shared";
 
 export class AuthenticationError extends Error {}
@@ -127,6 +135,39 @@ export async function listNotifications(): Promise<AssistantNotification[]> {
 
 export async function markNotificationRead(id: string): Promise<void> {
   await request(`/api/notifications/${id}/read`, { method: "POST" });
+}
+
+export async function listWorkspaceFolders(): Promise<WorkspaceFolder[]> {
+  return WorkspaceFolderListSchema.parse(await request("/api/workspace/folders")).folders;
+}
+
+export async function createWorkspaceFolder(input: CreateWorkspaceFolderInput): Promise<WorkspaceFolder> {
+  const result = await request("/api/workspace/folders", {
+    method: "POST", body: JSON.stringify(input),
+  }) as { folder: unknown };
+  return WorkspaceFolderSchema.parse(result.folder);
+}
+
+export async function updateWorkspaceFolder(id: string, input: UpdateWorkspaceFolderInput): Promise<WorkspaceFolder> {
+  const result = await request(`/api/workspace/folders/${id}`, {
+    method: "PATCH", body: JSON.stringify(input),
+  }) as { folder: unknown };
+  return WorkspaceFolderSchema.parse(result.folder);
+}
+
+export async function deleteWorkspaceFolder(id: string): Promise<void> {
+  await request(`/api/workspace/folders/${id}`, { method: "DELETE" });
+}
+
+export async function listWorkspaceItemPlacements(): Promise<WorkspaceItemPlacement[]> {
+  return WorkspaceItemPlacementListSchema.parse(await request("/api/workspace/placements")).placements;
+}
+
+export async function moveWorkspaceItem(input: MoveWorkspaceItemInput): Promise<WorkspaceItemPlacement | null> {
+  const result = await request("/api/workspace/placements", {
+    method: "PUT", body: JSON.stringify(input),
+  }) as { placement: unknown };
+  return result.placement === null ? null : WorkspaceItemPlacementListSchema.shape.placements.element.parse(result.placement);
 }
 
 export async function listSchedules(): Promise<Schedule[]> {

@@ -16,6 +16,9 @@ import {
   type ScheduleTriggerKind,
   type Task,
   type TaskStatus,
+  type WorkspaceFolder,
+  type WorkspaceItemPlacement,
+  MAIN_CONTROLLER_NAME,
 } from "@cc-assistant/shared";
 import {
   AuthenticationError,
@@ -42,6 +45,8 @@ import {
   listSchedules,
   listSessions,
   listTasks,
+  listWorkspaceFolders,
+  listWorkspaceItemPlacements,
   login,
   logout,
   markNotificationRead,
@@ -299,7 +304,7 @@ function ClaudeSessionControlPanel({ sessions, defaultCwd, onChange }: {
     <div className="controller-quickstart">
       <span>Start the main controller as an attachable terminal session.</span>
       <button disabled={busy === "main-controller" || !defaultCwd} onClick={() => void propose("main-controller", {
-        action: "dispatch", cwd: defaultCwd, name: "cc-assistant-controller", permissionMode,
+        action: "dispatch", cwd: defaultCwd, name: `${MAIN_CONTROLLER_NAME}-web-${Date.now().toString(36)}`, permissionMode,
         prompt: "Enter cc-assistant controller mode, load durable state read-only, summarize current focus, and wait for direction.",
       })}>Propose main controller</button>
     </div>
@@ -788,6 +793,8 @@ export default function App(): React.JSX.Element {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [abilities, setAbilities] = useState<AbilityManifest[]>([]);
   const [browserJobs, setBrowserJobs] = useState<BrowserJob[]>([]);
+  const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([]);
+  const [workspacePlacements, setWorkspacePlacements] = useState<WorkspaceItemPlacement[]>([]);
   const [defaultCwd, setDefaultCwd] = useState("");
   const [browserStatus, setBrowserStatus] = useState<BrowserAutomationStatus>({
     backend: "claude_in_chrome", enabled: true, state: "stopped", activeJobId: null,
@@ -799,8 +806,8 @@ export default function App(): React.JSX.Element {
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const [nextTasks, nextSessions, nextClaudeAgentSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, config, nextBrowserStatus] = await Promise.all([
-        listTasks(), listSessions(), listClaudeAgentSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), getConfig(), getBrowserStatus(),
+      const [nextTasks, nextSessions, nextClaudeAgentSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, nextFolders, nextPlacements, config, nextBrowserStatus] = await Promise.all([
+        listTasks(), listSessions(), listClaudeAgentSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), listWorkspaceFolders(), listWorkspaceItemPlacements(), getConfig(), getBrowserStatus(),
       ]);
       setTasks(nextTasks);
       setSessions(nextSessions);
@@ -812,6 +819,8 @@ export default function App(): React.JSX.Element {
       setMemories(nextMemories);
       setAbilities(nextAbilities);
       setBrowserJobs(nextBrowserJobs);
+      setWorkspaceFolders(nextFolders);
+      setWorkspacePlacements(nextPlacements);
       setDefaultCwd(config.allowedRoots[0] ?? "");
       setBrowserStatus(nextBrowserStatus);
       setAuthenticated(true);
@@ -890,6 +899,8 @@ export default function App(): React.JSX.Element {
         memories={memories}
         abilities={abilities}
         browserJobs={browserJobs}
+        folders={workspaceFolders}
+        placements={workspacePlacements}
         browserStatus={browserStatus}
         onChange={() => void refresh()}
       /> : <>
@@ -914,6 +925,7 @@ export default function App(): React.JSX.Element {
       <StateStudio snapshot={{
         tasks, observedSessions: sessions, claudeSessions: claudeAgentSessions, runs, approvals,
         notifications, schedules, memories, abilities, browserJobs, browserStatus,
+        workspaceFolders, workspacePlacements,
       }} onChange={() => void refresh()} />
 
       <section className="summary">

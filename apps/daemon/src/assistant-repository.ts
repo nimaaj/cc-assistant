@@ -5,15 +5,25 @@ import {
   AssistantEventSchema,
   AssistantNotificationSchema,
   BrowserJobSchema,
+  CreateWorkspaceFolderSchema,
   CreateScheduleSchema,
+  MoveWorkspaceItemSchema,
   ScheduleSchema,
   UpdateScheduleSchema,
+  UpdateWorkspaceFolderSchema,
+  WorkspaceFolderSchema,
+  WorkspaceItemPlacementSchema,
   type AbilityManifest,
   type AssistantEvent,
   type AssistantNotification,
   type BrowserJob,
+  type CreateWorkspaceFolderInput,
   type CreateScheduleInput,
+  type MoveWorkspaceItemInput,
   type Schedule,
+  type UpdateWorkspaceFolderInput,
+  type WorkspaceFolder,
+  type WorkspaceItemPlacement,
 } from "@cc-assistant/shared";
 
 type JsonRecord = Record<string, unknown>;
@@ -50,6 +60,19 @@ function mapBrowserJob(row: Row): BrowserJob {
   });
 }
 
+function mapWorkspaceFolder(row: Row): WorkspaceFolder {
+  return WorkspaceFolderSchema.parse({
+    id: row.id, name: row.name, icon: row.icon, createdAt: row.created_at,
+    updatedAt: row.updated_at, revision: row.revision,
+  });
+}
+
+function mapWorkspaceItemPlacement(row: Row): WorkspaceItemPlacement {
+  return WorkspaceItemPlacementSchema.parse({
+    itemType: row.item_type, itemId: row.item_id, folderId: row.folder_id, updatedAt: row.updated_at,
+  });
+}
+
 function nextRun(triggerKind: Schedule["triggerKind"], trigger: JsonRecord, now = Date.now()): string | null {
   if (triggerKind === "at") {
     const at = String(trigger.at ?? "");
@@ -79,6 +102,8 @@ function nextRun(triggerKind: Schedule["triggerKind"], trigger: JsonRecord, now 
 
 export class ScheduleNotFoundError extends Error {}
 export class ScheduleRevisionConflictError extends Error {}
+export class WorkspaceFolderNotFoundError extends Error {}
+export class WorkspaceFolderRevisionConflictError extends Error {}
 
 export class AssistantRepository {
   readonly #db: DatabaseSync;
@@ -117,6 +142,16 @@ export class AssistantRepository {
         created_at TEXT NOT NULL, claimed_at TEXT, completed_at TEXT
       );
       CREATE INDEX IF NOT EXISTS browser_jobs_status_idx ON browser_jobs(status, created_at);
+      CREATE TABLE IF NOT EXISTS workspace_folders (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, icon TEXT NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS workspace_item_placements (
+        item_type TEXT NOT NULL, item_id TEXT NOT NULL, folder_id TEXT NOT NULL,
+        updated_at TEXT NOT NULL, PRIMARY KEY(item_type, item_id)
+      );
+      CREATE INDEX IF NOT EXISTS workspace_item_placements_folder_idx
+        ON workspace_item_placements(folder_id, updated_at);
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, source TEXT NOT NULL,
         occurred_at TEXT NOT NULL, entity_type TEXT, entity_id TEXT, payload_json TEXT NOT NULL
@@ -246,6 +281,93 @@ export class AssistantRepository {
   markNotificationRead(id: string): void {
     this.#db.prepare("UPDATE notifications SET read=1 WHERE id=?").run(id);
     this.#event("notification.read", "notification", id, {});
+  }
+
+  createWorkspaceFolder(rawInput: CreateWorkspaceFolderInput): WorkspaceFolder {
+    const input = CreateWorkspaceFolderSchema.parse(rawInput);
+    const now = new Date().toISOString();
+    const folder = WorkspaceFolderSchema.parse({
+      id: randomUUID(), name: input.name, icon: input.icon, createdAt: now, updatedAt: now, revision: 1,
+    });
+    this.#db.prepare(`INSERT INTO workspace_folders
+      (id, name, icon, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(folder.id, folder.name, folder.icon, folder.createdAt, folder.updatedAt, folder.revision);
+    this.#event("workspace_folder.created", "workspace_folder", folder.id, { folder });
+    return folder;
+  }
+
+  getWorkspaceFolder(id: string): WorkspaceFolder | undefined {
+    const row = this.#db.prepare("SELECT * FROM workspace_folders WHERE id=?").get(id) as Row | undefined;
+    return row ? mapWorkspaceFolder(row) : undefined;
+  }
+
+  listWorkspaceFolders(): WorkspaceFolder[] {
+    return (this.#db.prepare("SELECT * FROM workspace_folders ORDER BY name COLLATE NOCASE, created_at").all() as Row[])
+      .map(mapWorkspaceFolder);
+  }
+
+  updateWorkspaceFolder(id: string, rawInput: UpdateWorkspaceFolderInput): WorkspaceFolder {
+    const input = UpdateWorkspaceFolderSchema.parse(rawInput);
+    const current = this.getWorkspaceFolder(id);
+    if (!current) throw new WorkspaceFolderNotFoundError(`Folder ${id} was not found`);
+    if (current.revision !== input.expectedRevision) {
+      throw new WorkspaceFolderRevisionConflictError(`Folder ${id} has changed since it was loaded`);
+    }
+    const updated = WorkspaceFolderSchema.parse({
+      ...current,
+      name: input.name ?? current.name,
+      icon: input.icon ?? current.icon,
+      updatedAt: new Date().toISOString(),
+      revision: current.revision + 1,
+    });
+    const result = this.#db.prepare(`UPDATE workspace_folders SET name=?, icon=?, updated_at=?, revision=?
+      WHERE id=? AND revision=?`).run(updated.name, updated.icon, updated.updatedAt, updated.revision, id, current.revision);
+    if (result.changes !== 1) {
+      throw new WorkspaceFolderRevisionConflictError(`Folder ${id} changed during the update`);
+    }
+    this.#event("workspace_folder.updated", "workspace_folder", id, { folder: updated });
+    return updated;
+  }
+
+  deleteWorkspaceFolder(id: string): void {
+    const current = this.getWorkspaceFolder(id);
+    if (!current) throw new WorkspaceFolderNotFoundError(`Folder ${id} was not found`);
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      this.#db.prepare("DELETE FROM workspace_item_placements WHERE folder_id=?").run(id);
+      this.#db.prepare("DELETE FROM workspace_folders WHERE id=?").run(id);
+      this.#db.exec("COMMIT");
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
+    this.#event("workspace_folder.deleted", "workspace_folder", id, { folder: current });
+  }
+
+  listWorkspaceItemPlacements(): WorkspaceItemPlacement[] {
+    return (this.#db.prepare("SELECT * FROM workspace_item_placements ORDER BY updated_at DESC").all() as Row[])
+      .map(mapWorkspaceItemPlacement);
+  }
+
+  moveWorkspaceItem(rawInput: MoveWorkspaceItemInput): WorkspaceItemPlacement | null {
+    const input = MoveWorkspaceItemSchema.parse(rawInput);
+    const now = new Date().toISOString();
+    if (input.folderId === null) {
+      this.#db.prepare("DELETE FROM workspace_item_placements WHERE item_type=? AND item_id=?")
+        .run(input.itemType, input.itemId);
+      this.#event("workspace_item.unfiled", input.itemType, input.itemId, { itemType: input.itemType, itemId: input.itemId });
+      return null;
+    }
+    if (!this.getWorkspaceFolder(input.folderId)) {
+      throw new WorkspaceFolderNotFoundError(`Folder ${input.folderId} was not found`);
+    }
+    const placement = WorkspaceItemPlacementSchema.parse({ ...input, updatedAt: now });
+    this.#db.prepare(`INSERT INTO workspace_item_placements (item_type, item_id, folder_id, updated_at)
+      VALUES (?, ?, ?, ?) ON CONFLICT(item_type, item_id) DO UPDATE SET
+      folder_id=excluded.folder_id, updated_at=excluded.updated_at`)
+      .run(placement.itemType, placement.itemId, placement.folderId, placement.updatedAt);
+    this.#event("workspace_item.moved", input.itemType, input.itemId, { placement });
+    return placement;
   }
 
   installAbility(rawManifest: unknown): AbilityManifest {
