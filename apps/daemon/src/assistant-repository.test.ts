@@ -66,6 +66,14 @@ describe("assistant repository", () => {
     expect(() => store.updateWorkspaceFolder(folder.id, {
       name: "Stale update", expectedRevision: folder.revision,
     })).toThrow("has changed since it was loaded");
+    const positioned = store.setWorkspaceItemLayout({
+      itemType: "task", itemId: moved?.itemId ?? "missing", x: -144, y: 288,
+    });
+    expect(positioned).toMatchObject({ x: -144, y: 288 });
+    store.setWorkspaceItemLayout({ itemType: "folder", itemId: folder.id, x: 360, y: 72 });
+    const trashed = store.trashWorkspaceItem({ itemType: "task", itemId: moved?.itemId ?? "missing" });
+    expect(trashed).toMatchObject({ itemType: "task", itemId: moved?.itemId });
+    expect(store.listWorkspaceItemPlacements()).toHaveLength(0);
     store.close();
     store = new AssistantRepository(databasePath);
     expect(store.listSchedules()).toMatchObject([{ id: schedule.id, enabled: false, revision: 2 }]);
@@ -73,10 +81,19 @@ describe("assistant repository", () => {
     expect(store.listNotifications()).toHaveLength(1);
     expect(store.getBrowserJob(job.id)?.status).toBe("succeeded");
     expect(store.getWorkspaceFolder(folder.id)).toMatchObject({ name: "Active project", revision: 2 });
-    expect(store.listWorkspaceItemPlacements()).toHaveLength(1);
+    expect(store.listWorkspaceItemPlacements()).toHaveLength(0);
+    expect(store.listWorkspaceTrashedItems()).toMatchObject([{ itemType: "task", itemId: moved?.itemId }]);
+    store.restoreWorkspaceItem({ itemType: "task", itemId: moved?.itemId ?? "missing" });
+    expect(store.listWorkspaceTrashedItems()).toHaveLength(0);
+    expect(store.listWorkspaceItemLayouts()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ itemType: "task", itemId: moved?.itemId, x: -144, y: 288 }),
+      expect.objectContaining({ itemType: "folder", itemId: folder.id, x: 360, y: 72 }),
+    ]));
     store.deleteWorkspaceFolder(folder.id);
     expect(store.listWorkspaceFolders()).toHaveLength(0);
     expect(store.listWorkspaceItemPlacements()).toHaveLength(0);
+    store.clearWorkspaceItemLayouts();
+    expect(store.listWorkspaceItemLayouts()).toHaveLength(0);
     store.close();
   });
 

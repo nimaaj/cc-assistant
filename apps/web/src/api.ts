@@ -6,6 +6,7 @@ import {
   BrowserJobListSchema,
   ClaudeAgentSessionListSchema,
   ClaudeSessionListSchema,
+  DispatcherProposalSchema,
   MemoryListSchema,
   MemoryRecordSchema,
   MemorySearchResultSchema,
@@ -17,10 +18,15 @@ import {
   WorkspaceFolderListSchema,
   WorkspaceFolderSchema,
   WorkspaceItemPlacementListSchema,
+  WorkspaceItemLayoutListSchema,
+  WorkspaceItemLayoutSchema,
+  WorkspaceTrashedItemListSchema,
+  WorkspaceTrashedItemSchema,
   type CreateTaskInput,
   type ClaudeSession,
   type ClaudeAgentSession,
   type ClaudeSessionControlInput,
+  type DispatcherProposal,
   type Approval,
   type AbilityManifest,
   type AssistantNotification,
@@ -37,9 +43,13 @@ import {
   type UpdateTaskInput,
   type CreateWorkspaceFolderInput,
   type MoveWorkspaceItemInput,
+  type SetWorkspaceItemLayoutInput,
+  type TrashWorkspaceItemInput,
   type UpdateWorkspaceFolderInput,
   type WorkspaceFolder,
   type WorkspaceItemPlacement,
+  type WorkspaceItemLayout,
+  type WorkspaceTrashedItem,
 } from "@cc-assistant/shared";
 
 export class AuthenticationError extends Error {}
@@ -92,11 +102,11 @@ export async function controlClaudeSession(input: ClaudeSessionControlInput): Pr
   await request("/api/claude/sessions/control", { method: "POST", body: JSON.stringify(input) });
 }
 
-export async function dispatchInput(input: string, target?: string): Promise<void> {
-  await request("/api/dispatcher", {
+export async function dispatchInput(input: string, target?: string, context: Record<string, unknown> = {}): Promise<DispatcherProposal> {
+  return DispatcherProposalSchema.parse(await request("/api/dispatcher", {
     method: "POST",
-    body: JSON.stringify({ input, ...(target ? { target } : {}) }),
-  });
+    body: JSON.stringify({ input, ...(target ? { target } : {}), context }),
+  }));
 }
 
 export async function listRuns(): Promise<Run[]> {
@@ -168,6 +178,38 @@ export async function moveWorkspaceItem(input: MoveWorkspaceItemInput): Promise<
     method: "PUT", body: JSON.stringify(input),
   }) as { placement: unknown };
   return result.placement === null ? null : WorkspaceItemPlacementListSchema.shape.placements.element.parse(result.placement);
+}
+
+export async function listWorkspaceItemLayouts(): Promise<WorkspaceItemLayout[]> {
+  return WorkspaceItemLayoutListSchema.parse(await request("/api/workspace/layouts")).layouts;
+}
+
+export async function setWorkspaceItemLayout(input: SetWorkspaceItemLayoutInput): Promise<WorkspaceItemLayout> {
+  const result = await request("/api/workspace/layouts", {
+    method: "PUT", body: JSON.stringify(input),
+  }) as { layout: unknown };
+  return WorkspaceItemLayoutSchema.parse(result.layout);
+}
+
+export async function resetWorkspaceItemLayouts(): Promise<void> {
+  await request("/api/workspace/layouts", { method: "DELETE" });
+}
+
+export async function listWorkspaceTrashedItems(): Promise<WorkspaceTrashedItem[]> {
+  return WorkspaceTrashedItemListSchema.parse(await request("/api/workspace/trash")).items;
+}
+
+export async function trashWorkspaceItem(input: TrashWorkspaceItemInput): Promise<WorkspaceTrashedItem> {
+  const result = await request("/api/workspace/trash", {
+    method: "PUT", body: JSON.stringify(input),
+  }) as { item: unknown };
+  return WorkspaceTrashedItemSchema.parse(result.item);
+}
+
+export async function restoreWorkspaceItem(input: TrashWorkspaceItemInput): Promise<void> {
+  await request("/api/workspace/trash/restore", {
+    method: "POST", body: JSON.stringify(input),
+  });
 }
 
 export async function listSchedules(): Promise<Schedule[]> {

@@ -35,7 +35,7 @@ For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md
 - Claude Code MCP tools for every capability above.
 - Claude Code lifecycle hooks and live session-state tracking.
 - A developer CLI for state inspection, mutation, export, and raw API calls.
-- A two-view responsive dashboard: a single-field dispatcher with draggable status panes, durable folders, task trash, six color themes, plus the full workspace for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
+- A two-view responsive dashboard: a single-field dispatcher with an animated, zoomable spatial canvas, durable free-position panes, desktop multi-selection, automatic drag-to-group folders, reversible all-item trash, contextual menus, diagnostics, six color themes, plus the full workspace for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
 
 ## Requirements
 
@@ -73,10 +73,26 @@ newest live controller whose generated name starts with `cc-assistant-controller
 appears as an exact one-time approval. Unique names keep Claude's supported cross-session delivery
 unambiguous when older controllers are still present. The controller can gather missing context,
 call a direct tool, or delegate structured multi-step work.
-Drag panes onto a folder icon to organize them without changing the underlying record. Folder names,
-icons, and membership are durable daemon state; the selected color theme is a browser preference.
-Dropping a task onto **Trash** marks it `cancelled` (so it remains auditable and recoverable) while
-non-task records are deliberately rejected by Trash.
+The spatial canvas fills the available workspace and keeps its folder, trash, diagnostics, theme, hover, zoom,
+and fit controls inside the canvas. Drag one item onto another to create a folder automatically;
+drag more items onto that folder to add them. Folder icons show their item count. Folder names,
+icons, membership, and pane coordinates are durable daemon state. **Grid**, **Status**, **Category**,
+and **Newest** auto-arrange buttons create and persist clean layouts. Theme, hover mode, and the
+React Flow viewport are browser preferences. An open folder becomes the destination for new
+dispatcher runs and approvals. Clicking a pane opens contextual controls, or enable **Expand on
+hover** to inspect items without clicking; expanded panes are raised above neighboring icons. Claude
+sessions can be messaged, continued, stopped, respawned, or attached from a native terminal;
+tasks, triggers, browser jobs, abilities, runs, approvals, notifications, and memories expose
+their relevant operations. Drag from anywhere on a collapsed card; drag the empty canvas to marquee-select,
+or use Ctrl/⌘-click for a discontinuous selection. Right-click items and folders for contextual
+move, restore, open, and delete actions. Protected work still enters the normal approval flow.
+Submit the dispatcher with its button or `Ctrl+Enter`/`⌘+Enter`. Dropping any ordinary item or
+selection onto **Trash** removes it from the working canvas without deleting its domain record;
+open Trash and right-click to restore it.
+Terminal history is kept out of the working canvas automatically: completed/cancelled tasks and
+runs, resolved approvals, read notifications, stopped sessions, and successful/cancelled browser
+jobs appear in the counted **Archive** system folder. The dispatcher header also exposes Manual,
+Automatic, and Bypass permission choices plus a one-click proposal for a controller in that mode.
 Use **Full workspace** for all explicit controls and the developer State studio. See the
 [dispatcher guide](docs/dispatcher.md) for the envelope, result contract, pane statuses, and
 trigger integration.

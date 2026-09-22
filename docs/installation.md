@@ -136,9 +136,10 @@ cat .data/access-token
 
 Paste it into the dashboard login screen. The dashboard exchanges it for an HTTP-only, same-site cookie; it does not keep the bearer token in browser JavaScript storage.
 
-The dashboard defaults to **Simplified**, with one dispatcher input, horizontally expanding
-status panes, durable drag-and-drop folders, recoverable task trash, and six browser-persisted
-color themes. **Full workspace** retains every explicit control from the original layout. The
+The dashboard defaults to **Simplified**, with one dispatcher input, an animated zoomable React Flow
+canvas, durable freely positioned panes, desktop multi-selection, drag-to-group folders,
+reversible all-item trash, contextual menus, diagnostics, and six
+browser-persisted color themes. **Full workspace** retains every explicit control from the original layout. The
 dispatcher requires a live main controller. Start one with `pnpm controller:bg`; the launcher adds
 a unique suffix to the `cc-assistant-controller-` name so supported cross-session delivery remains
 unambiguous. Then approve dispatcher deliveries from the attention row. See

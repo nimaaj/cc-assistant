@@ -39,7 +39,7 @@ Calendar observations feed the assistant's own durable reminder scheduler. The b
 
 ## Persisted entities
 
-The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, `workspace_folders`, `workspace_item_placements`, and append-only `events`.
+The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, `workspace_folders`, `workspace_item_placements`, `workspace_item_layouts`, and append-only `events`.
 
 All mutable entities use revisions or internal queue claims where concurrent actors may update them.
 
@@ -55,11 +55,19 @@ cross-session approval, and only delivers the versioned request envelope after a
 and system-notification dispatches use the same path. The controller—not the web client—performs
 context gathering, direct tool selection, decomposition, delegation, and final result synthesis.
 
-Simplified-view folder membership is presentation metadata, but it is durable shared state so it
-survives reloads and can be inspected through the API and State studio. Dragging a task to Trash
-uses the ordinary revision-safe task transition to `cancelled` and removes its folder placement;
-it never hard-deletes the task. Color theme choice is the exception: it is a per-browser
-`localStorage` preference because it has no assistant-state meaning.
+Simplified-view folder membership and pane coordinates are presentation metadata, but they are
+durable shared state so they survive reloads and can be inspected through the API and State studio.
+The React Flow viewport, hover-expansion mode, and theme remain per-browser preferences. Dragging
+one item onto another creates a folder through the same authenticated folder and placement APIs;
+new dispatcher records inherit the open folder. Grid, status, category, and time arrangements are
+calculated in the client and persisted through the same durable layout API as manual dragging.
+Terminal records are filtered into a virtual Archive folder in the client, so archiving does not
+rewrite domain records or erase their audit history. Restoring a task changes its ordinary task
+status and makes it visible on the working canvas again.
+Dragging an ordinary item or multi-selection to Trash writes `workspace_trashed_items` markers and
+removes folder placement; it never hard-deletes or mutates the domain records. Restoring removes the
+marker and returns the item to the base canvas. The UI-only preferences use `localStorage` because they have no
+assistant-state meaning.
 
 ## Memory data ownership
 

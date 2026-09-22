@@ -13,7 +13,8 @@ boundaries.
 
 ## Dispatcher lifecycle
 
-1. The web client posts the user's text to `POST /api/dispatcher`.
+1. The web client posts the user's text and optional active-folder context to
+   `POST /api/dispatcher`. Use the button or `Ctrl+Enter`/`⌘+Enter`.
 2. The daemon reads Claude Code's supported live session inventory and chooses the newest live,
    uniquely named session whose name is `cc-assistant-controller` or begins with
    `cc-assistant-controller-`. Background launchers generate the suffix automatically. An explicit
@@ -53,7 +54,8 @@ the trigger-time snapshot is still correct.
 
 ## Compact pane statuses
 
-The simplified view normalizes domain-specific states into eight presentation statuses:
+The simplified view places every visible state item on one full-size spatial canvas and normalizes
+domain-specific states into eight presentation statuses:
 
 | Status | Meaning |
 | --- | --- |
@@ -66,25 +68,64 @@ The simplified view normalizes domain-specific states into eight presentation st
 | Complete | Successfully finished or durably stored |
 | Available | An installed capability that can be invoked |
 
-Collapsed panes show type, icon, and color. Selecting a pane expands its width first to expose a
-one-sentence description, followed by exact details and any safe action controls.
+Collapsed panes show type, status icon, color, and a short title. Selecting a pane expands its
+width first to expose a one-sentence description, followed by exact details and contextual
+controls. Claude sessions
+support messaging, continuation, background stop/respawn, and copying the native attach command;
+tasks, triggers, Calendar/Slack jobs, abilities, runs, approvals, notifications, and memories
+expose their relevant operations. Protected operations remain proposals until explicitly approved.
+Pane coordinates are stored in `workspace_item_layouts`; dropping a pane elsewhere on the canvas
+persists its new integer `x`/`y` position. **Reset layout** clears those coordinates and returns to
+the deterministic automatic grid. The canvas uses React Flow for panning, wheel/pinch zooming,
+zoom buttons, fit-to-view, and a minimap. Its viewport, the **Expand on hover** toggle, and the
+selected color theme are presentation preferences stored in the current browser.
+Expanded panes receive a dedicated top layer so their controls and details do not disappear behind
+neighboring nodes. The embedded auto-arrange toolbar can create a compact grid or group the visible
+items by status, category, or newest-first time. Auto-arranged coordinates are persisted like manual
+drag positions and work in both the base workspace and an open folder.
+
+The base canvas contains a counted, read-only **Archive** system folder. It automatically collects
+completed or cancelled tasks and runs, resolved approvals, read notifications, stopped Claude
+sessions, and successful or cancelled browser jobs without deleting their durable records. Failed
+or blocked work stays on the base canvas because it still needs attention. Memories, abilities, and
+configured triggers remain visible because completion does not make them obsolete.
+
+The dispatcher header has Manual, Automatic, and Bypass permission buttons. The selection is stored
+as a browser preference and applies when **Start controller** or **Start replacement controller** is
+used. Starting still creates a one-time approval; changing the selector does not silently alter an
+already-running Claude process. Bypass mode displays an explicit isolation warning.
+
+Status icons animate according to meaning: active work rotates, waiting work pulses, attention
+items signal briefly, idle items breathe, and completed items acknowledge periodically. The
+dispatcher activity strip uses separate motion languages for request routing, approval waits,
+Claude/agent work, local commands, browser work, and completion. All animation collapses to a
+single effectively static frame when the operating system requests reduced motion.
 
 ## Drag, folders, trash, and themes
 
-Every pane backed by a durable record can be dragged with the mouse. Drop it on a folder tile to
-file it, or on **Unfiled** to remove its folder assignment. **All items** ignores folder filtering;
-selecting a folder or **Unfiled** filters all four pane rows consistently. Folder creation, icon
-selection, renaming, deletion, and membership use the authenticated daemon API. They are stored in
-`workspace_folders` and `workspace_item_placements`, and changes publish normal SSE events. Deleting
-a folder preserves its contents by returning them to Unfiled.
+Every pane backed by a durable record can be dragged from anywhere on its collapsed card. Drag an
+empty canvas region to marquee-select icons, or use Ctrl/⌘-click to build a discontinuous selection;
+dragging a selected icon moves and applies folder/trash drops to the selection. Drop one item onto another
+to create a folder containing both items, or drop onto an existing folder to add it. Folder icons
+carry a count badge. Opening a folder shows only its members; its embedded **Back to base** target
+also accepts dropped items to unfile them. While a folder is open, new dispatcher runs and approvals
+are filed there automatically. Folder icon selection, renaming, deletion, and membership use the
+authenticated daemon API. They are stored in `workspace_folders` and
+`workspace_item_placements`, and changes publish normal SSE events. Deleting a folder preserves its
+contents by returning them to the base workspace. A right-click menu exposes Open/Delete for folders
+and Remove from folder/Move to Trash/Restore for items as appropriate.
 
-Trash accepts tasks only. A drop performs the normal revision-checked task update to `cancelled`;
-it does not delete the record or its audit history. Runs, approvals, notifications, memories,
-schedules, abilities, browser jobs, and Claude sessions cannot be discarded from this surface.
+Trash accepts every ordinary canvas item. A drop writes a `workspace_trashed_items` marker and removes
+folder placement without deleting or mutating the underlying task, run, approval, notification,
+memory, schedule, ability, browser job, or Claude-session record. Open the counted Trash view and use
+the right-click Restore action to return one or several selected items to the base workspace.
 
-The theme dots switch between Forest, Midnight, Ocean, Ember, Plum, and Graphite. Theme selection
-is presentation-only and stays in that browser's `localStorage`; it is not assistant state and does
-not cross browser profiles.
+Folder management, Trash, themes, hover behavior, auto-arrangement, status legend, zoom controls,
+the minimap all live inside the canvas. An expandable **Status & diagnostics** panel summarizes the
+daemon, controller, browser worker, approvals, selection, current operation, and recent UI messages.
+The theme dots switch between Forest, Midnight, Ocean, Ember, Plum, and
+Graphite. Presentation preferences stay in that browser's `localStorage`; they are not assistant
+state and do not cross browser profiles.
 
 ## Verification
 
@@ -92,12 +133,18 @@ With `pnpm dev` running:
 
 1. open `http://127.0.0.1:4318` and confirm **Simplified** is selected;
 2. verify the dispatcher reports the newest main controller status;
-3. expand panes in each row and confirm descriptions remain readable without navigating away;
-4. create and rename a folder, drag a pane into it, and verify folder filtering survives a reload;
-5. drag a task onto Trash and verify it appears as `cancelled` in **Full workspace**;
-6. switch themes, reload, and verify the selected palette remains active;
-7. switch to **Full workspace** and verify the original controls remain present;
-8. submit a harmless dispatcher request, inspect its pending approval, and deny it or approve it
+3. confirm collapsed panes have short titles, then test click expansion and **Expand on hover**;
+4. drag several panes, pan and zoom, reload, and confirm positions and viewport persist;
+5. run **Grid**, **Status**, **Category**, and **Newest** and confirm each produces a stable layout;
+6. use **Reset layout** and confirm panes return to the default grid;
+7. drag one item onto another, verify a counted folder is created, add another item, and verify
+   folder membership survives a reload;
+8. open that folder, dispatch a harmless request, and verify the proposed run and approval appear
+   in the open folder;
+9. multi-select two items, drag them onto Trash, open Trash, and right-click to restore them;
+10. switch themes, reload, and verify the selected palette remains active;
+11. switch to **Full workspace** and verify the original controls remain present;
+12. submit a harmless dispatcher request, inspect its pending approval, and deny it or approve it
    once to test delivery;
-9. create a one-time dispatcher schedule and verify firing creates an approval rather than sending
+13. create a one-time dispatcher schedule and verify firing creates an approval rather than sending
    without consent.

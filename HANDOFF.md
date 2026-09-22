@@ -18,8 +18,8 @@ then update the stale documentation as part of the change.
 - On the current Linux machine that path resolves to `/home/nima/code/all-chat/cc-assistant`.
   Avoid treating the two spellings as separate checkouts.
 - Latest functional features at the time of this handoff: reliable uniquely named controller
-  dispatch, plus Simplified-view mouse drag/drop, durable folders and item placement, recoverable
-  task trash, and six color themes.
+  dispatch, plus an animated zoomable Simplified-view spatial canvas, durable arbitrary item
+  coordinates and folders, recoverable task trash, and six color themes.
 - `.data/`, all normal `dist/` directories, dependencies, and local editor metadata are ignored.
   The generated Claude plugin server bundle is the important exception and is committed.
 
@@ -250,12 +250,21 @@ a validated raw `/api/*` console. It never edits SQLite directly. The CLI remain
 state interface and also exposes memory export/import.
 
 The dashboard defaults to a **Simplified** tab with one dispatcher field and horizontally expanding
-status panes; the original complete interface remains under **Full workspace**. Dispatcher requests
+status panes on a zoomable React Flow canvas; the original complete interface remains under
+**Full workspace**. Canvas controls, folders, and recoverable task trash are embedded in the
+workspace. Dropping an item onto another automatically creates a counted folder, and dispatcher
+work created while that folder is open is filed there. Collapsed panes include short titles and
+can expand on click or hover. Expanded panes are layered over neighboring icons. Grid, status,
+category, and newest-first auto-arrange controls persist the resulting coordinates. Expanded panes provide contextual controls for Claude sessions, tasks, runs,
+triggers, Calendar/Slack browser work, abilities, notifications, approvals, and memories. Dispatcher requests
 select the newest live `cc-assistant-controller`, enter the existing cross-session approval path,
 and arrive as `CC_ASSISTANT_DISPATCH_V1` envelopes. Time and notification triggers can use the
 `dispatcher` action kind, but cannot approve their own delivery. The canonical decomposition,
 subtask, and structured-result contract lives in `prompts/controller.md`; operational details are
 in `docs/dispatcher.md`.
+Completed terminal work is hidden from the base canvas and exposed through the counted virtual
+Archive folder; records remain durable. Manual, Automatic, and Bypass mode buttons in the dispatcher
+header apply to newly proposed controller sessions and do not mutate a running controller.
 
 ### Abilities and native helpers
 

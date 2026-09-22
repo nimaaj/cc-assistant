@@ -243,6 +243,13 @@ export type Approval = z.infer<typeof ApprovalSchema>;
 
 export const ApprovalListSchema = z.object({ approvals: z.array(ApprovalSchema) });
 
+export const DispatcherProposalSchema = z.object({
+  run: RunSchema,
+  approval: ApprovalSchema,
+  target: ClaudeAgentSessionSchema,
+});
+export type DispatcherProposal = z.infer<typeof DispatcherProposalSchema>;
+
 export const StartAgentRunSchema = z.object({
   taskId: z.uuid().nullable().optional(),
   title: z.string().trim().min(1).max(240),
@@ -400,6 +407,8 @@ export const workspaceItemTypes = [
 ] as const;
 export const WorkspaceItemTypeSchema = z.enum(workspaceItemTypes);
 export type WorkspaceItemType = z.infer<typeof WorkspaceItemTypeSchema>;
+export const WorkspaceCanvasEntityTypeSchema = z.enum([...workspaceItemTypes, "folder", "browser_worker"]);
+export type WorkspaceCanvasEntityType = z.infer<typeof WorkspaceCanvasEntityTypeSchema>;
 
 export const workspaceFolderIcons = [
   "folder",
@@ -457,6 +466,40 @@ export const MoveWorkspaceItemSchema = z.object({
   folderId: z.uuid().nullable(),
 }).strict();
 export type MoveWorkspaceItemInput = z.infer<typeof MoveWorkspaceItemSchema>;
+
+export const WorkspaceTrashedItemSchema = z.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: z.string().min(1).max(500),
+  trashedAt: z.iso.datetime(),
+});
+export type WorkspaceTrashedItem = z.infer<typeof WorkspaceTrashedItemSchema>;
+export const WorkspaceTrashedItemListSchema = z.object({
+  items: z.array(WorkspaceTrashedItemSchema),
+});
+
+export const TrashWorkspaceItemSchema = z.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: z.string().trim().min(1).max(500),
+}).strict();
+export type TrashWorkspaceItemInput = z.infer<typeof TrashWorkspaceItemSchema>;
+
+export const WorkspaceItemLayoutSchema = z.object({
+  itemType: WorkspaceCanvasEntityTypeSchema,
+  itemId: z.string().min(1).max(500),
+  x: z.number().int().min(-100_000).max(100_000),
+  y: z.number().int().min(-100_000).max(100_000),
+  updatedAt: z.iso.datetime(),
+});
+export type WorkspaceItemLayout = z.infer<typeof WorkspaceItemLayoutSchema>;
+export const WorkspaceItemLayoutListSchema = z.object({ layouts: z.array(WorkspaceItemLayoutSchema) });
+
+export const SetWorkspaceItemLayoutSchema = WorkspaceItemLayoutSchema.pick({
+  itemType: true,
+  itemId: true,
+  x: true,
+  y: true,
+}).strict();
+export type SetWorkspaceItemLayoutInput = z.infer<typeof SetWorkspaceItemLayoutSchema>;
 
 export const memoryStatuses = ["active", "archived"] as const;
 export const MemoryStatusSchema = z.enum(memoryStatuses);

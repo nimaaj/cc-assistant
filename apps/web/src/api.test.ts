@@ -9,7 +9,13 @@ import {
   listAbilities,
   listWorkspaceFolders,
   listWorkspaceItemPlacements,
+  listWorkspaceItemLayouts,
+  listWorkspaceTrashedItems,
   moveWorkspaceItem,
+  resetWorkspaceItemLayouts,
+  restoreWorkspaceItem,
+  setWorkspaceItemLayout,
+  trashWorkspaceItem,
   proposeCommand,
   readClipboardImage,
   updateSchedule,
@@ -60,15 +66,23 @@ describe("web API client", () => {
     }));
   });
 
-  it("sends dispatcher input without inventing controller context", async () => {
-    const fetch = vi.fn().mockResolvedValue(jsonResponse({ accepted: true }, 202));
+  it("sends validated workspace context and parses the proposed run and approval", async () => {
+    const now = "2026-09-21T12:00:00.000Z";
+    const proposal = {
+      run: { id: "00000000-0000-4000-8000-000000000010", taskId: null, kind: "command", status: "waiting_approval", title: "Dispatch", prompt: "Remember it", cwd: "/workspace", sessionId: null, result: null, error: null, metadata: {}, createdAt: now, startedAt: null, completedAt: null, revision: 1 },
+      approval: { id: "00000000-0000-4000-8000-000000000011", runId: "00000000-0000-4000-8000-000000000010", actionType: "session_control", summary: "Dispatch", payload: {}, status: "pending", createdAt: now, resolvedAt: null, resolutionNote: null },
+      target: { id: "controller", sessionId: "00000000-0000-4000-8000-000000000012", name: "cc-assistant-controller-test", cwd: "/workspace", kind: "background", startedAt: 1, state: "working", pid: 42, status: "busy", waitingFor: null },
+    };
+    const fetch = vi.fn().mockResolvedValue(jsonResponse(proposal, 202));
     vi.stubGlobal("fetch", fetch);
 
-    await dispatchInput("Remember the Linux version and environment here.");
+    await expect(dispatchInput("Remember the Linux version and environment here.", undefined, {
+      workspaceFolderId: "00000000-0000-4000-8000-000000000013",
+    })).resolves.toMatchObject({ run: { id: proposal.run.id }, approval: { id: proposal.approval.id } });
 
     expect(fetch).toHaveBeenCalledWith("/api/dispatcher", expect.objectContaining({
       method: "POST",
-      body: JSON.stringify({ input: "Remember the Linux version and environment here." }),
+      body: JSON.stringify({ input: "Remember the Linux version and environment here.", context: { workspaceFolderId: "00000000-0000-4000-8000-000000000013" } }),
     }));
   });
 
@@ -148,6 +162,12 @@ describe("web API client", () => {
       .mockResolvedValueOnce(jsonResponse({ folder }, 201))
       .mockResolvedValueOnce(jsonResponse({ placements: [placement] }))
       .mockResolvedValueOnce(jsonResponse({ placement }))
+      .mockResolvedValueOnce(jsonResponse({ layouts: [{ ...placement, x: 20, y: 40 }] }))
+      .mockResolvedValueOnce(jsonResponse({ layout: { ...placement, x: 20, y: 40 } }))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ itemType: "task", itemId: placement.itemId, trashedAt: "2026-09-21T10:02:00.000Z" }] }))
+      .mockResolvedValueOnce(jsonResponse({ item: { itemType: "task", itemId: placement.itemId, trashedAt: "2026-09-21T10:02:00.000Z" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetch);
 
@@ -156,6 +176,13 @@ describe("web API client", () => {
     await expect(listWorkspaceItemPlacements()).resolves.toMatchObject([placement]);
     await expect(moveWorkspaceItem({ itemType: "task", itemId: placement.itemId, folderId: folder.id }))
       .resolves.toMatchObject(placement);
+    await expect(listWorkspaceItemLayouts()).resolves.toMatchObject([{ x: 20, y: 40 }]);
+    await expect(setWorkspaceItemLayout({ itemType: "task", itemId: placement.itemId, x: 20, y: 40 }))
+      .resolves.toMatchObject({ x: 20, y: 40 });
+    await expect(listWorkspaceTrashedItems()).resolves.toMatchObject([{ itemType: "task", itemId: placement.itemId }]);
+    await expect(trashWorkspaceItem({ itemType: "task", itemId: placement.itemId })).resolves.toMatchObject({ itemType: "task" });
+    await expect(restoreWorkspaceItem({ itemType: "task", itemId: placement.itemId })).resolves.toBeUndefined();
+    await expect(resetWorkspaceItemLayouts()).resolves.toBeUndefined();
     await expect(deleteWorkspaceFolder(folder.id)).resolves.toBeUndefined();
   });
 });

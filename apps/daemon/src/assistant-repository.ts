@@ -9,10 +9,14 @@ import {
   CreateScheduleSchema,
   MoveWorkspaceItemSchema,
   ScheduleSchema,
+  SetWorkspaceItemLayoutSchema,
+  TrashWorkspaceItemSchema,
   UpdateScheduleSchema,
   UpdateWorkspaceFolderSchema,
   WorkspaceFolderSchema,
   WorkspaceItemPlacementSchema,
+  WorkspaceItemLayoutSchema,
+  WorkspaceTrashedItemSchema,
   type AbilityManifest,
   type AssistantEvent,
   type AssistantNotification,
@@ -21,9 +25,13 @@ import {
   type CreateScheduleInput,
   type MoveWorkspaceItemInput,
   type Schedule,
+  type SetWorkspaceItemLayoutInput,
+  type TrashWorkspaceItemInput,
   type UpdateWorkspaceFolderInput,
   type WorkspaceFolder,
   type WorkspaceItemPlacement,
+  type WorkspaceItemLayout,
+  type WorkspaceTrashedItem,
 } from "@cc-assistant/shared";
 
 type JsonRecord = Record<string, unknown>;
@@ -70,6 +78,19 @@ function mapWorkspaceFolder(row: Row): WorkspaceFolder {
 function mapWorkspaceItemPlacement(row: Row): WorkspaceItemPlacement {
   return WorkspaceItemPlacementSchema.parse({
     itemType: row.item_type, itemId: row.item_id, folderId: row.folder_id, updatedAt: row.updated_at,
+  });
+}
+
+function mapWorkspaceItemLayout(row: Row): WorkspaceItemLayout {
+  return WorkspaceItemLayoutSchema.parse({
+    itemType: row.item_type, itemId: row.item_id, x: row.position_x, y: row.position_y,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mapWorkspaceTrashedItem(row: Row): WorkspaceTrashedItem {
+  return WorkspaceTrashedItemSchema.parse({
+    itemType: row.item_type, itemId: row.item_id, trashedAt: row.trashed_at,
   });
 }
 
@@ -152,6 +173,17 @@ export class AssistantRepository {
       );
       CREATE INDEX IF NOT EXISTS workspace_item_placements_folder_idx
         ON workspace_item_placements(folder_id, updated_at);
+      CREATE TABLE IF NOT EXISTS workspace_item_layouts (
+        item_type TEXT NOT NULL, item_id TEXT NOT NULL,
+        position_x INTEGER NOT NULL, position_y INTEGER NOT NULL,
+        updated_at TEXT NOT NULL, PRIMARY KEY(item_type, item_id)
+      );
+      CREATE TABLE IF NOT EXISTS workspace_trashed_items (
+        item_type TEXT NOT NULL, item_id TEXT NOT NULL, trashed_at TEXT NOT NULL,
+        PRIMARY KEY(item_type, item_id)
+      );
+      CREATE INDEX IF NOT EXISTS workspace_trashed_items_time_idx
+        ON workspace_trashed_items(trashed_at DESC);
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, source TEXT NOT NULL,
         occurred_at TEXT NOT NULL, entity_type TEXT, entity_id TEXT, payload_json TEXT NOT NULL
@@ -368,6 +400,61 @@ export class AssistantRepository {
       .run(placement.itemType, placement.itemId, placement.folderId, placement.updatedAt);
     this.#event("workspace_item.moved", input.itemType, input.itemId, { placement });
     return placement;
+  }
+
+  listWorkspaceTrashedItems(): WorkspaceTrashedItem[] {
+    return (this.#db.prepare("SELECT * FROM workspace_trashed_items ORDER BY trashed_at DESC").all() as Row[])
+      .map(mapWorkspaceTrashedItem);
+  }
+
+  trashWorkspaceItem(rawInput: TrashWorkspaceItemInput): WorkspaceTrashedItem {
+    const input = TrashWorkspaceItemSchema.parse(rawInput);
+    const trashed = WorkspaceTrashedItemSchema.parse({ ...input, trashedAt: new Date().toISOString() });
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      this.#db.prepare(`INSERT INTO workspace_trashed_items (item_type, item_id, trashed_at)
+        VALUES (?, ?, ?) ON CONFLICT(item_type, item_id) DO UPDATE SET trashed_at=excluded.trashed_at`)
+        .run(trashed.itemType, trashed.itemId, trashed.trashedAt);
+      this.#db.prepare("DELETE FROM workspace_item_placements WHERE item_type=? AND item_id=?")
+        .run(trashed.itemType, trashed.itemId);
+      this.#db.exec("COMMIT");
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
+    this.#event("workspace_item.trashed", trashed.itemType, trashed.itemId, { trashed });
+    return trashed;
+  }
+
+  restoreWorkspaceItem(rawInput: TrashWorkspaceItemInput): void {
+    const input = TrashWorkspaceItemSchema.parse(rawInput);
+    const result = this.#db.prepare("DELETE FROM workspace_trashed_items WHERE item_type=? AND item_id=?")
+      .run(input.itemType, input.itemId);
+    this.#event("workspace_item.restored", input.itemType, input.itemId, {
+      itemType: input.itemType, itemId: input.itemId, restored: Number(result.changes) > 0,
+    });
+  }
+
+  listWorkspaceItemLayouts(): WorkspaceItemLayout[] {
+    return (this.#db.prepare("SELECT * FROM workspace_item_layouts ORDER BY updated_at DESC").all() as Row[])
+      .map(mapWorkspaceItemLayout);
+  }
+
+  setWorkspaceItemLayout(rawInput: SetWorkspaceItemLayoutInput): WorkspaceItemLayout {
+    const input = SetWorkspaceItemLayoutSchema.parse(rawInput);
+    const layout = WorkspaceItemLayoutSchema.parse({ ...input, updatedAt: new Date().toISOString() });
+    this.#db.prepare(`INSERT INTO workspace_item_layouts
+      (item_type, item_id, position_x, position_y, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(item_type, item_id) DO UPDATE SET position_x=excluded.position_x,
+      position_y=excluded.position_y, updated_at=excluded.updated_at`)
+      .run(layout.itemType, layout.itemId, layout.x, layout.y, layout.updatedAt);
+    this.#event("workspace_item.positioned", layout.itemType, layout.itemId, { layout });
+    return layout;
+  }
+
+  clearWorkspaceItemLayouts(): void {
+    const result = this.#db.prepare("DELETE FROM workspace_item_layouts").run();
+    this.#event("workspace_layout.reset", "workspace_layout", "canvas", { cleared: Number(result.changes) });
   }
 
   installAbility(rawManifest: unknown): AbilityManifest {

@@ -317,6 +317,30 @@ describe("daemon API", () => {
       payload: { itemType: "task", itemId: created.json().task.id, folderId },
     });
     expect(movedItem.json().placement).toMatchObject({ itemType: "task", folderId });
+    const positionedItem = await app.inject({
+      method: "PUT", url: "/api/workspace/layouts", headers: { cookie: cookie as string },
+      payload: { itemType: "task", itemId: created.json().task.id, x: 120, y: 240 },
+    });
+    expect(positionedItem.json().layout).toMatchObject({ x: 120, y: 240 });
+    const listedLayouts = await app.inject({
+      method: "GET", url: "/api/workspace/layouts", headers: { cookie: cookie as string },
+    });
+    expect(listedLayouts.json().layouts).toMatchObject([{ itemType: "task", x: 120, y: 240 }]);
+    const trashedItem = await app.inject({
+      method: "PUT", url: "/api/workspace/trash", headers: { cookie: cookie as string },
+      payload: { itemType: "task", itemId: created.json().task.id },
+    });
+    expect(trashedItem.statusCode).toBe(200);
+    expect(trashedItem.json().item).toMatchObject({ itemType: "task", itemId: created.json().task.id });
+    const listedTrash = await app.inject({
+      method: "GET", url: "/api/workspace/trash", headers: { cookie: cookie as string },
+    });
+    expect(listedTrash.json().items).toHaveLength(1);
+    const restoredItem = await app.inject({
+      method: "POST", url: "/api/workspace/trash/restore", headers: { cookie: cookie as string },
+      payload: { itemType: "task", itemId: created.json().task.id },
+    });
+    expect(restoredItem.statusCode).toBe(204);
     const listedFolders = await app.inject({
       method: "GET", url: "/api/workspace/folders", headers: { cookie: cookie as string },
     });
@@ -329,6 +353,10 @@ describe("daemon API", () => {
       method: "GET", url: "/api/workspace/placements", headers: { cookie: cookie as string },
     });
     expect(listedPlacements.json().placements).toEqual([]);
+    const resetLayouts = await app.inject({
+      method: "DELETE", url: "/api/workspace/layouts", headers: { cookie: cookie as string },
+    });
+    expect(resetLayouts.statusCode).toBe(204);
 
     await app.close();
     rmSync(databasePath, { force: true });

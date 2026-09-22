@@ -14,6 +14,8 @@ import {
   MemoryMarkdownExportSchema,
   MemoryMarkdownImportRequestSchema,
   MoveWorkspaceItemSchema,
+  SetWorkspaceItemLayoutSchema,
+  TrashWorkspaceItemSchema,
   CreateScheduleSchema,
   CreateWorkspaceFolderSchema,
   CreateTaskSchema,
@@ -420,10 +422,15 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   });
 
   app.post("/api/dispatcher", async (request, reply) => {
+    const body = z.object({
+      input: z.string(),
+      target: z.string().optional(),
+      context: z.record(z.string(), z.unknown()).optional(),
+    }).strict().parse(request.body);
     const input = DispatcherRequestSchema.parse({
-      ...z.object({ input: z.string(), target: z.string().optional() }).parse(request.body),
+      ...body,
       source: "web",
-      context: {},
+      context: body.context ?? {},
     });
     const proposed = await claudeSessionControlService.proposeDispatcher(input);
     return reply.code(202).send(proposed);
@@ -551,6 +558,32 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   app.put("/api/workspace/placements", async (request) => ({
     placement: assistantRepository.moveWorkspaceItem(MoveWorkspaceItemSchema.parse(request.body)),
   }));
+
+  app.get("/api/workspace/layouts", async () => ({
+    layouts: assistantRepository.listWorkspaceItemLayouts(),
+  }));
+
+  app.put("/api/workspace/layouts", async (request) => ({
+    layout: assistantRepository.setWorkspaceItemLayout(SetWorkspaceItemLayoutSchema.parse(request.body)),
+  }));
+
+  app.delete("/api/workspace/layouts", async (_request, reply) => {
+    assistantRepository.clearWorkspaceItemLayouts();
+    return reply.code(204).send();
+  });
+
+  app.get("/api/workspace/trash", async () => ({
+    items: assistantRepository.listWorkspaceTrashedItems(),
+  }));
+
+  app.put("/api/workspace/trash", async (request) => ({
+    item: assistantRepository.trashWorkspaceItem(TrashWorkspaceItemSchema.parse(request.body)),
+  }));
+
+  app.post("/api/workspace/trash/restore", async (request, reply) => {
+    assistantRepository.restoreWorkspaceItem(TrashWorkspaceItemSchema.parse(request.body));
+    return reply.code(204).send();
+  });
 
   app.post("/api/triggers/system-notification", async (request) => {
     const input = z.object({ app: z.string().optional(), title: z.string().optional(), body: z.string().optional() }).parse(request.body);

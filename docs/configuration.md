@@ -102,6 +102,11 @@ Environment changes require a daemon restart. MCP-only path changes also require
 | `*.log` | Service helpers | Operational logs; rotate externally if needed |
 
 The daemon is the only supported writer to SQLite. Use the CLI or authenticated API for state changes.
-Simplified-view folder definitions and item membership are included in `assistant.sqlite`.
-The active color theme is intentionally UI-local and stored as `cc-assistant-theme` in browser
-`localStorage`; it contains no credentials or assistant records.
+Simplified-view folder definitions, item membership, reversible trash markers, and free-position canvas coordinates are
+included in `assistant.sqlite`. The active color theme, hover-expansion preference, and React Flow
+viewport are intentionally UI-local and stored as `cc-assistant-theme`,
+`cc-assistant-expand-on-hover`, and `cc-assistant-canvas-viewport` in browser `localStorage`;
+none contains credentials or assistant records.
+The Simplified-view controller launcher also stores its last explicit mode under
+`cc-assistant-permission-mode`; this preference never changes the permission mode of an existing
+Claude session.
