@@ -507,8 +507,9 @@ automatically.
   smoke. This is ephemeral machine state, not a service-management guarantee.
 - A saved local `.data/runtime-config.json` may exist because the UI permission/configuration path
   was exercised. It is ignored and should be treated as machine-local state.
-- GitHub reported three moderate Dependabot alerts after the latest feature push. Audit them as a
-  separate dependency-maintenance task; do not casually upgrade the lockfile during unrelated work.
+- GitHub reports moderate Dependabot alerts on the default branch. Check the current count in the
+  repository security view, and audit them as a separate dependency-maintenance task; do not
+  casually upgrade the lockfile during unrelated work.
 
 ## Unfinished work
 
