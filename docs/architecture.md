@@ -11,6 +11,11 @@ The system is split into five process boundaries:
 4. The developer CLI provides human-readable and JSON state control through that API.
 5. A bounded Agent SDK worker delegates browser-only jobs to Claude Code's official Claude-in-Chrome integration; an optional macOS watcher handles notification triggers.
 
+A runtime recipe is the process supervisor around these boundaries, not a sixth data owner. The
+default recipe keeps the daemon and interactive dispatcher in named tmux windows. Claude Code
+spawns each session's MCP stdio bridge. Recipe configuration is a validated JSON file outside
+SQLite; the dashboard can edit it, but process changes apply only after repair/relaunch.
+
 The split allows reminders, session monitoring, and managed agents to survive the end of an individual Claude Code session.
 
 SQLite is not a public mutation interface. Every writer uses the daemon so validation, optimistic revisions, audit events, and live subscriptions remain consistent. Developers can use `cca api` when they need low-level access to an authenticated endpoint.
@@ -24,7 +29,9 @@ SQLite is not a public mutation interface. Every writer uses the daemon so valid
 - Claude session discovery reads `claude agents --json --all`; logs and lifecycle controls use
   the documented Claude CLI. Cross-session delivery is delegated to a tool-limited Claude
   process with only `ListAgents` and `SendMessage`. Every mutation is approval-backed, target
-  permission rules remain authoritative, and no terminal input or private job file is injected.
+  permission rules remain authoritative. A separate runtime-control boundary can send only a
+  one-line allowlisted built-in slash command to the recipe-owned dispatcher pane after a durable
+  approval; it cannot deliver arbitrary prompts or edit private Claude files.
 - Account tokens remain in the macOS Keychain or the owning browser profile.
 
 ## Google Calendar constraint

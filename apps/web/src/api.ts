@@ -12,6 +12,9 @@ import {
   MemorySearchResultSchema,
   MemoryLinksSchema,
   RunListSchema,
+  RuntimeRecipeSchema,
+  RuntimeStatusSchema,
+  RuntimeTranscriptSchema,
   ScheduleListSchema,
   TaskListSchema,
   TaskSchema,
@@ -37,6 +40,10 @@ import {
   type Memory,
   type MemorySearchHit,
   type Run,
+  type RuntimeControlInput,
+  type RuntimeRecipe,
+  type RuntimeStatus,
+  type RuntimeTranscript,
   type Schedule,
   type Task,
   type UpdateScheduleInput,
@@ -100,6 +107,31 @@ export async function listClaudeAgentSessions(): Promise<ClaudeAgentSession[]> {
 
 export async function controlClaudeSession(input: ClaudeSessionControlInput): Promise<void> {
   await request("/api/claude/sessions/control", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function getRuntimeConfig(): Promise<{
+  recipe: RuntimeRecipe;
+  daemon: { platform: string; host: string; port: number; allowedRoots: string[]; dataDir: string; browser?: unknown; managedAgent?: unknown };
+}> {
+  const result = await request("/api/runtime/config") as { recipe: unknown; daemon: { platform: string; host: string; port: number; allowedRoots: string[]; dataDir: string; browser?: unknown; managedAgent?: unknown } };
+  return { recipe: RuntimeRecipeSchema.parse(result.recipe), daemon: result.daemon };
+}
+
+export async function updateRuntimeConfig(recipe: RuntimeRecipe): Promise<RuntimeRecipe> {
+  const result = await request("/api/runtime/config", { method: "PUT", body: JSON.stringify(recipe) }) as { recipe: unknown };
+  return RuntimeRecipeSchema.parse(result.recipe);
+}
+
+export async function getRuntimeStatus(): Promise<RuntimeStatus> {
+  return RuntimeStatusSchema.parse(await request("/api/runtime/status"));
+}
+
+export async function controlRuntime(input: RuntimeControlInput): Promise<void> {
+  await request("/api/runtime/control", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function getClaudeTranscript(reference: string): Promise<RuntimeTranscript> {
+  return RuntimeTranscriptSchema.parse(await request(`/api/claude/sessions/${encodeURIComponent(reference)}/transcript`));
 }
 
 export async function dispatchInput(input: string, target?: string, context: Record<string, unknown> = {}): Promise<DispatcherProposal> {

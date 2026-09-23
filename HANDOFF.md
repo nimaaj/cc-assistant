@@ -2,7 +2,7 @@
 
 This document is the fast, self-contained entry point for another LLM coding agent continuing
 work on cc-assistant. It describes the product intent, implemented system, operating constraints,
-current verification evidence, and unfinished work as of **2026-09-21**.
+current verification evidence, and unfinished work as of **2026-09-22**.
 
 It is a map, not a replacement for the source. Before changing code, read [`AGENTS.md`](AGENTS.md),
 the imported [`prompts/controller.md`](prompts/controller.md), and the source-of-truth document
@@ -17,9 +17,10 @@ then update the stale documentation as part of the change.
   `/home/nima/Documents/codes/all-chat/cc-assistant`
 - On the current Linux machine that path resolves to `/home/nima/code/all-chat/cc-assistant`.
   Avoid treating the two spellings as separate checkouts.
-- Latest functional features at the time of this handoff: reliable uniquely named controller
-  dispatch, plus an animated zoomable Simplified-view spatial canvas, durable arbitrary item
-  coordinates and folders, recoverable task trash, and six color themes.
+- Latest functional features at the time of this handoff: a versioned runtime-recipe layer whose
+  default starts a persistent Claude dispatcher and daemon in tmux, approval-backed dispatcher
+  repair/terminal/slash controls, editable next-launch configuration, session transcript windows,
+  and a corrected desktop-like Simplified canvas with persistent arrangement and multi-selection.
 - `.data/`, all normal `dist/` directories, dependencies, and local editor metadata are ignored.
   The generated Claude plugin server bundle is the important exception and is committed.
 
@@ -123,6 +124,60 @@ The main request path is:
 See [`docs/architecture.md`](docs/architecture.md) and the interactive
 [`docs/diagrams/cc-assistant-runtime-flow.html`](docs/diagrams/cc-assistant-runtime-flow.html).
 
+## Current runtime baseline (2026-09-22)
+
+The default production-style entry point changed in the latest implementation tranche:
+
+```text
+pnpm start
+  -> scripts/runtime-recipe.mjs start default
+  -> detached tmux session "cc-assistant"
+       |-- window "daemon": built Fastify daemon + production web UI
+       `-- window "dispatcher": persistent interactive Claude Code lead
+             --name cc-assistant-controller
+             --permission-mode auto
+             --teammate-mode tmux
+             project MCP bridge spawned over stdio from .mcp.json
+```
+
+`pnpm start` returns after creating or repairing the detached session. Attach with
+`tmux attach-session -t cc-assistant`. `pnpm start:daemon` preserves the old daemon-only behavior,
+and `pnpm dev` remains daemon plus Vite on ports 4317/4318 without automatically starting tmux or
+Claude. The MCP bridge is intentionally not a third persistent service: each Claude process starts
+the project stdio MCP server when it loads `.mcp.json`.
+
+The committed baseline is [`recipes/default.json`](recipes/default.json). A validated local
+override is stored at ignored path `.data/runtime-config.json`; it contains process configuration,
+not credentials. The Simplified UI edits this override and shows current daemon values read-only.
+Dispatcher changes take effect through **Relaunch dispatcher**. Daemon environment changes take
+effect only after a full daemon restart. The active data directory and access token are
+deliberately excluded from browser-editable configuration.
+
+The main dispatcher remains the fixed lead for the lifetime of the recipe. For coordinated work,
+the controller prompt tells it to prefer Claude agent teams, which inherit the lead permission
+mode and appear as panes in the same tmux session. Independent background Claude sessions still
+use Claude's supported `agents`, `attach`, `logs`, `respawn`, and `stop` interfaces. Do not claim
+that every background session is a tmux pane.
+
+Runtime mutations are not direct UI side effects. **Repair**, **Relaunch dispatcher**, **Open
+terminal**, per-session terminal actions, and dispatcher slash commands first create durable
+one-time approvals through `ExecutionService`. Slash commands are restricted at both the shared
+API schema and launcher layers to a one-line allowlist. This is the sole approved terminal-input
+exception; normal dispatcher prompts use the existing `ListAgents`/`SendMessage` bridge.
+
+Key implementation entry points for this tranche:
+
+| Path | Role |
+| --- | --- |
+| `recipes/default.json` | Committed default topology and next-launch process settings |
+| `scripts/runtime-recipe.mjs` | Recipe loading, tmux creation/repair, terminal launch, slash injection, status |
+| `apps/daemon/src/runtime-service.ts` | Validated override persistence, tmux status/transcript lookup, protected proposals |
+| `packages/shared/src/index.ts` | Runtime recipe/status/control/transcript schemas and slash allowlist |
+| `apps/web/src/SimplifiedView.tsx` | Runtime editor, controls, permission picker, transcript manager, canvas interactions |
+| `docs/runtime-recipes.md` | Complete operator and recovery guide |
+
+No additional dependency was introduced for this work. Both lockfiles remain unchanged.
+
 ## Workspace map
 
 | Path | Responsibility |
@@ -139,6 +194,7 @@ See [`docs/architecture.md`](docs/architecture.md) and the interactive
 | `abilities` | Version-1 data-only ability format and examples |
 | `native/macos` | Optional Notification Center Accessibility watcher |
 | `scripts` | Doctor, controller launcher, hook installers, service installer, and smoke tests |
+| `recipes` | Versioned process-topology configurations; `default.json` is the production baseline |
 | `docs/handover` | Designs and runbooks for work that is intentionally unfinished |
 
 Do not edit these generated files as their source of truth:
@@ -205,8 +261,11 @@ There are two intentionally separate session views:
 cross-session messages, dispatch, continue, stop, respawn, and safely remove background sessions.
 Every mutation enters the normal approval ledger. Messaging uses a tool-limited Claude process
 with only `ListAgents` and `SendMessage`; target inbound settings and permissions remain in force.
-Never replace this with terminal keystrokes or writes to Claude job, roster, socket, or transcript
-files. See [`docs/claude-session-orchestration.md`](docs/claude-session-orchestration.md).
+Never replace message delivery with terminal keystrokes or writes to Claude job, roster, socket, or
+transcript files. The recipe runtime has one narrow exception: after durable approval it can send a
+validated allowlisted slash command to the configured dispatcher tmux pane. See
+[`docs/claude-session-orchestration.md`](docs/claude-session-orchestration.md) and
+[`docs/runtime-recipes.md`](docs/runtime-recipes.md).
 
 ### Calendar and Slack
 
@@ -289,9 +348,10 @@ pnpm controller:sandbox
 ```
 
 Background launchers create a real Claude Code session; use the printed short ID with
-`claude attach <id>`. Manual is the default. Automatic mode is explicit, while bypass mode removes
-Claude's prompts and must be limited to an independently isolated environment. None of these modes
-bypass cc-assistant's approval ledger.
+`claude attach <id>`. Automatic mode is now the default for controller and dispatched Claude
+sessions. Manual remains selectable, while bypass mode removes Claude's prompts and must be
+limited to an independently isolated environment. None of these modes bypass cc-assistant's
+separate durable approval ledger.
 
 The launcher always passes an explicit controller settings file. Both controller profiles enable
 the checkout's declared project MCP server, allowing background sessions to start without waiting
@@ -378,7 +438,8 @@ Equivalent npm setup is `npm ci`, `npm run build`, and `npm run dev`.
 
 Then open <http://127.0.0.1:4318>, authenticate with the private local token, restart Claude Code
 from the repository root, and confirm `/mcp`. For production-style source operation use
-`pnpm build && pnpm start`, then open <http://127.0.0.1:4317>.
+`pnpm build && pnpm start`, then open <http://127.0.0.1:4317>. The latter also launches the
+persistent controller; attach with `tmux attach-session -t cc-assistant`.
 
 Full instructions are in [`docs/installation.md`](docs/installation.md).
 
@@ -402,16 +463,29 @@ pnpm assistant:doctor
 CC_ASSISTANT_DATA_DIR=.data node scripts/mcp-smoke.mjs
 ```
 
-At the last completed feature handoff:
+At the last completed feature handoff on 2026-09-22:
 
-- 19 test files and 63 tests passed;
+- daemon: 18 files and 63 tests passed;
+- CLI: 1 file and 3 tests passed;
+- web: 2 files and 13 tests passed;
+- shared/client/MCP workspaces reported no test files and exited successfully as configured;
 - all workspace TypeScript checks passed;
 - the production Vite build passed;
 - the plugin bundle built and strict validation passed;
-- a live `claude agents --json --all` inventory worked;
-- an injected session-control proposal/denial API smoke passed; and
-- the local dashboard rendered both the simplified dispatcher/status-pane view and the full
-  workspace; horizontal pane expansion was visually verified with no console errors.
+- `git diff --check` passed;
+- the recipe list and controller dry-run produced the expected fixed name, `auto` permission,
+  and `tmux` teammate mode without duplicate CLI arguments; and
+- the live local dashboard exposed the runtime editor and controls with no console warnings;
+  Automatic was selected, Shift-click multi-selection and selection-aware context menus were
+  exercised, transcript collapse/minimize/restore worked, and auto-arranged non-system items kept
+  their positions across reload.
+
+The default recipe itself was not started during this final pass because doing so would create a
+new live, potentially billable Claude session. This is the most important remaining runtime smoke:
+run `pnpm start`, inspect `pnpm recipe:status`, attach to tmux, submit a harmless dispatcher request,
+approve its delivery, create one team teammate, exercise `/compact`, open a transcript, then stop
+the tmux session when finished. Do not perform external Calendar or Slack writes as part of that
+smoke without a separate exact user approval.
 
 The repository has dedicated workspace runners for both pnpm and npm and commits both lockfiles.
 Do not alternate managers against one `node_modules` tree. Dependency changes must refresh and
@@ -429,6 +503,10 @@ automatically.
 - This project must not request a separate cc-assistant Chrome extension.
 - macOS-specific service, clipboard, and Accessibility checks remain outstanding.
 - `.data` contains live local state and is ignored. Do not inspect or expose the access token.
+- The browser-visible development server was running at `127.0.0.1:4318` during the final UI
+  smoke. This is ephemeral machine state, not a service-management guarantee.
+- A saved local `.data/runtime-config.json` may exist because the UI permission/configuration path
+  was exercised. It is ignored and should be treated as machine-local state.
 - GitHub reported three moderate Dependabot alerts after the latest feature push. Audit them as a
   separate dependency-maintenance task; do not casually upgrade the lockfile during unrelated work.
 
@@ -450,7 +528,7 @@ The core roadmap is complete. The maintained backlog is:
    profile or cannot use Claude-in-Chrome. See
    [`docs/handover/playwright-browser-driver.md`](docs/handover/playwright-browser-driver.md).
 5. **Manual verification** — controlled Calendar creation, Slack send, physical macOS clipboard,
-   and macOS notification trigger. See
+   macOS notification trigger, and one full default-recipe/tmux controller smoke. See
    [`docs/handover/live-verification.md`](docs/handover/live-verification.md).
 
 Do not infer an ordering among the first three. Ask the user which outcome matters next unless the

@@ -17,6 +17,7 @@ This directory is the source of truth for operating, extending, and handing over
 | Explore the runtime request and automation lifecycle | [Interactive runtime flow](diagrams/cc-assistant-runtime-flow.html) |
 | Run the controlling Claude session or enable strict sandbox mode | [Claude controller session](controller-session.md) |
 | Use the simplified UI and understand dispatcher routing | [Simplified dashboard and dispatcher](dispatcher.md) |
+| Start and repair the default tmux topology or create recipes | [Runtime recipes and tmux topology](runtime-recipes.md) |
 | Manage and orchestrate local Claude Code sessions | [Claude session orchestration](claude-session-orchestration.md) |
 | Work on the codebase | [Development guide](development.md) |
 | See implemented and verified capabilities | [Completion audit](completion-audit.md) |

@@ -140,9 +140,9 @@ The dashboard defaults to **Simplified**, with one dispatcher input, an animated
 canvas, durable freely positioned panes, desktop multi-selection, drag-to-group folders,
 reversible all-item trash, contextual menus, diagnostics, and six
 browser-persisted color themes. **Full workspace** retains every explicit control from the original layout. The
-dispatcher requires a live main controller. Start one with `pnpm controller:bg`; the launcher adds
-a unique suffix to the `cc-assistant-controller-` name so supported cross-session delivery remains
-unambiguous. Then approve dispatcher deliveries from the attention row. See
+`pnpm start` creates the daemon and a persistent main controller in the `cc-assistant` tmux
+session. Attach with `tmux attach-session -t cc-assistant`; use the dashboard's Repair control if
+either recipe window is missing. Then approve dispatcher deliveries from the attention row. See
 [Simplified dashboard and dispatcher](dispatcher.md).
 
 If `.data/access-token` does not exist, confirm that the daemon started successfully and that `CC_ASSISTANT_DATA_DIR` points to the same directory used by the daemon.
@@ -187,8 +187,9 @@ The controller launcher passes `.claude/controller.settings.json` explicitly so 
 session can trust this checkout's committed `.mcp.json` without waiting at an interactive prompt.
 Review `.mcp.json` before using the launcher in a checkout you do not trust.
 
-The default is manual permission handling. `pnpm controller:bg:auto` selects Claude Code's
-automatic mode, while `pnpm controller:bg:bypass` selects `bypassPermissions`. Bypass mode removes
+The default is automatic permission handling. `pnpm controller:bg` and
+`pnpm controller:bg:auto` select Claude Code's automatic mode; pass `--permission-mode manual` for
+manual mode, while `pnpm controller:bg:bypass` selects `bypassPermissions`. Bypass mode removes
 Claude's permission prompts and is appropriate only inside a separately isolated environment; it
 does not bypass cc-assistant's own durable approval ledger.
 
@@ -295,7 +296,10 @@ X11 clipboard:     xclip
 Notifications:     libnotify (provides notify-send)
 ```
 
-Run `pnpm assistant:doctor` after installation. Automatic Linux user-service installation is not implemented yet; keep `pnpm start` under a user-managed supervisor if persistent startup is required.
+Run `pnpm assistant:doctor` after installation. `pnpm start` now creates a detached tmux recipe
+whose windows can auto-restart their processes. Automatic Linux login-time service installation is
+not implemented; invoke `pnpm start` from your preferred user login mechanism if boot persistence
+is required.
 
 ### macOS
 

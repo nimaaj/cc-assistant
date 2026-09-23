@@ -79,6 +79,23 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .dispatcher-controller-bar { display: flex; align-items: center; gap: 10px; margin: -4px 0 12px; padding: 8px 9px; background: color-mix(in srgb, var(--input) 78%, transparent); border: 1px solid var(--line); border-radius: 11px; }
 .dispatcher-controller-bar > span { flex: 1; color: var(--muted); font-size: .62rem; }
 .dispatcher-controller-bar > button { padding: 6px 9px; font-size: .64rem; }
+.dispatcher-command-bar { display: flex; align-items: end; gap: 8px; margin: -5px 0 10px; }
+.dispatcher-command-bar label { flex: 1; display: grid; gap: 3px; }
+.dispatcher-command-bar label span { color: var(--muted); font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; }
+.dispatcher-command-bar input { min-height: 34px; padding: 6px 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.dispatcher-command-bar button { min-height: 34px; padding: 6px 10px; font-size: .64rem; }
+.runtime-config-panel { margin: 0 0 12px; padding: 8px 10px; background: color-mix(in srgb, var(--input) 78%, transparent); border: 1px solid var(--line); border-radius: 11px; }
+.runtime-config-panel > summary { cursor: pointer; color: var(--muted); font-size: .68rem; font-weight: 700; }
+.runtime-config-panel form { display: grid; gap: 10px; padding-top: 10px; }
+.runtime-config-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; }
+.runtime-config-grid label, .runtime-description { display: grid; gap: 3px; }
+.runtime-config-grid label > span, .runtime-description > span { color: var(--muted); font-size: .56rem; text-transform: uppercase; letter-spacing: .07em; }
+.runtime-config-grid input, .runtime-config-grid select, .runtime-description textarea { min-width: 0; padding: 7px 8px; font-size: .65rem; }
+.runtime-flags { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: .64rem; }
+.runtime-flags label { display: flex; align-items: center; gap: 5px; }
+.runtime-readonly { display: grid; gap: 4px; padding: 8px; background: rgba(0,0,0,.12); border-radius: 8px; font-size: .6rem; }
+.runtime-readonly code { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
+.runtime-readonly pre { max-height: 180px; overflow: auto; }
 .permission-mode-picker { display: inline-flex; gap: 3px; padding: 3px; background: var(--page); border: 1px solid var(--line); border-radius: 9px; }
 .permission-mode-picker button { padding: 5px 8px; border-color: transparent; font-size: .63rem; }
 .permission-mode-picker button.selected { color: var(--accent-dark); background: var(--accent); border-color: var(--accent); }
@@ -252,6 +269,21 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .canvas-context-menu small { color: var(--muted); font-size: .56rem; }
 .canvas-context-menu button { width: 100%; justify-content: flex-start; padding: 7px 8px; text-align: left; border-color: transparent; font-size: .64rem; }
 .canvas-context-menu button.danger { color: var(--danger); }
+.transcript-window-layer { position: fixed; inset: 0; z-index: 12000; pointer-events: none; }
+.transcript-window { position: absolute; width: min(680px, calc(100vw - 30px)); max-height: min(70vh, 720px); overflow: hidden; pointer-events: auto; color: var(--text); background: color-mix(in srgb, var(--panel-raised) 98%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line)); border-radius: 12px; box-shadow: 0 24px 70px rgba(0,0,0,.58); resize: both; }
+.transcript-window.collapsed { width: min(420px, calc(100vw - 30px)); resize: none; }
+.transcript-window-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 9px 8px 12px; cursor: move; user-select: none; background: color-mix(in srgb, var(--input) 88%, transparent); border-bottom: 1px solid var(--line); touch-action: none; }
+.transcript-window.collapsed .transcript-window-titlebar { border-bottom: 0; }
+.transcript-window-titlebar > div:first-child { min-width: 0; display: grid; gap: 2px; }
+.transcript-window-titlebar strong, .transcript-window-titlebar small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transcript-window-titlebar strong { font-size: .7rem; }
+.transcript-window-titlebar small { color: var(--muted); font-size: .56rem; }
+.transcript-window-titlebar > div:last-child { display: flex; gap: 4px; }
+.transcript-window-titlebar button { width: 28px; height: 26px; padding: 0; }
+.transcript-window > pre { min-height: 220px; max-height: calc(70vh - 44px); margin: 0; overflow: auto; padding: 13px; border: 0; border-radius: 0; font-size: .66rem; white-space: pre-wrap; }
+.transcript-taskbar { position: fixed; z-index: 13000; left: 50%; bottom: 10px; max-width: calc(100vw - 24px); display: flex; align-items: center; gap: 5px; padding: 6px; transform: translateX(-50%); background: color-mix(in srgb, var(--panel-raised) 96%, transparent); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 35px rgba(0,0,0,.42); }
+.transcript-taskbar > span { padding: 0 6px; color: var(--muted); font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; }
+.transcript-taskbar button { max-width: 190px; overflow: hidden; padding: 6px 9px; font-size: .62rem; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-empty-panel { margin: 180px 0 0 28px; }
 @keyframes compact-detail-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes status-spin { to { transform: rotate(360deg); } }
@@ -472,6 +504,8 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
   .dispatcher-submit-row .primary { width: 100%; }
   .dispatcher-heading { align-items: flex-start; flex-direction: column; }
   .dispatcher-controller-bar { align-items: stretch; flex-direction: column; }
+  .dispatcher-command-bar { align-items: stretch; flex-direction: column; }
+  .runtime-config-grid { grid-template-columns: 1fr 1fr; }
   .permission-mode-picker { align-self: flex-start; }
   .theme-picker { align-self: stretch; justify-content: space-between; }
   .folder-editor { grid-template-columns: 1fr; }

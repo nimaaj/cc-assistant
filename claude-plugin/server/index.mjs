@@ -19822,6 +19822,101 @@ var ClaudeAgentSessionSchema = external_exports.object({
 var ClaudeAgentSessionListSchema = external_exports.object({ sessions: external_exports.array(ClaudeAgentSessionSchema) });
 var ClaudeSessionTargetSchema = external_exports.string().trim().min(1).max(240);
 var ClaudePermissionModeSchema = external_exports.enum(["manual", "auto", "bypassPermissions"]);
+var RuntimeRecipeSchema = external_exports.object({
+  version: external_exports.literal(1),
+  id: external_exports.string().trim().min(1).max(80).regex(/^[a-z0-9][a-z0-9-]*$/),
+  name: external_exports.string().trim().min(1).max(120),
+  description: external_exports.string().trim().max(2e3),
+  tmuxSession: external_exports.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+  daemonWindow: external_exports.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+  dispatcherWindow: external_exports.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+  dispatcherName: external_exports.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/),
+  dispatcherPermissionMode: ClaudePermissionModeSchema.default("auto"),
+  dispatcherSandbox: external_exports.boolean().default(false),
+  dispatcherTeammateMode: external_exports.enum(["tmux", "in-process", "auto"]).default("tmux"),
+  dispatcherModel: external_exports.string().trim().min(1).max(120).nullable().default(null),
+  dispatcherEffort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).default("high"),
+  dispatcherRemoteControl: external_exports.boolean().default(false),
+  autoRepair: external_exports.boolean().default(true),
+  terminalLauncher: external_exports.enum(["auto", "xdg-terminal-exec", "gnome-terminal", "konsole", "xterm"]).default("auto"),
+  daemon: external_exports.object({
+    host: external_exports.string().trim().min(1).max(255).default("127.0.0.1"),
+    port: external_exports.number().int().min(1).max(65535).default(4317),
+    allowedRoots: external_exports.array(external_exports.string().trim().min(1)).max(64).default([]),
+    managedAgentUseClaudeLogin: external_exports.boolean().default(true),
+    browserEnabled: external_exports.boolean().default(true),
+    browserUseClaudeLogin: external_exports.boolean().default(true),
+    browserModel: external_exports.string().trim().min(1).max(120).default("sonnet"),
+    browserEffort: external_exports.enum(["low", "medium", "high"]).default("low"),
+    browserMaxTurns: external_exports.number().int().min(1).max(50).default(12),
+    browserMaxBudgetUsd: external_exports.number().positive().max(10).default(1)
+  }).strict().default({
+    host: "127.0.0.1",
+    port: 4317,
+    allowedRoots: [],
+    managedAgentUseClaudeLogin: true,
+    browserEnabled: true,
+    browserUseClaudeLogin: true,
+    browserModel: "sonnet",
+    browserEffort: "low",
+    browserMaxTurns: 12,
+    browserMaxBudgetUsd: 1
+  })
+}).strict();
+var RuntimePaneSchema = external_exports.object({
+  windowName: external_exports.string(),
+  paneId: external_exports.string(),
+  pid: external_exports.number().int().nonnegative(),
+  command: external_exports.string(),
+  dead: external_exports.boolean()
+});
+var RuntimeStatusSchema = external_exports.object({
+  recipe: RuntimeRecipeSchema,
+  tmuxAvailable: external_exports.boolean(),
+  sessionExists: external_exports.boolean(),
+  daemonManaged: external_exports.boolean(),
+  dispatcherManaged: external_exports.boolean(),
+  dispatcherConnected: external_exports.boolean(),
+  dispatcherSessionId: external_exports.string().nullable(),
+  panes: external_exports.array(RuntimePaneSchema),
+  checkedAt: external_exports.iso.datetime()
+});
+var runtimeSlashCommands = [
+  "agents",
+  "compact",
+  "config",
+  "context",
+  "doctor",
+  "mcp",
+  "memory",
+  "permissions",
+  "reload-plugins",
+  "rewind",
+  "status",
+  "tasks"
+];
+var RuntimeSlashCommandSchema = external_exports.string().trim().min(2).max(1e3).regex(/^\/[A-Za-z][A-Za-z0-9-]*(?:\s[^\r\n]*)?$/).refine((value) => runtimeSlashCommands.includes(value.slice(1).split(/\s/, 1)[0].toLowerCase()), {
+  message: `Slash command must be one of: ${runtimeSlashCommands.map((value) => `/${value}`).join(", ")}`
+});
+var RuntimeControlSchema = external_exports.discriminatedUnion("action", [
+  external_exports.object({ action: external_exports.enum(["repair", "relaunch_dispatcher", "open_terminal"]) }).strict(),
+  external_exports.object({
+    action: external_exports.literal("open_session_terminal"),
+    target: external_exports.string().trim().min(1).max(240)
+  }).strict(),
+  external_exports.object({
+    action: external_exports.literal("slash_command"),
+    command: RuntimeSlashCommandSchema
+  }).strict()
+]);
+var RuntimeTranscriptSchema = external_exports.object({
+  reference: external_exports.string().min(1),
+  source: external_exports.enum(["tmux", "claude_logs"]),
+  available: external_exports.boolean().default(true),
+  content: external_exports.string(),
+  error: external_exports.string().nullable().default(null),
+  capturedAt: external_exports.iso.datetime()
+});
 var ClaudeSessionControlSchema = external_exports.discriminatedUnion("action", [
   external_exports.object({
     action: external_exports.literal("message"),
@@ -19844,7 +19939,7 @@ var ClaudeSessionControlSchema = external_exports.discriminatedUnion("action", [
     name: external_exports.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/).optional(),
     model: external_exports.string().trim().min(1).max(120).optional(),
     effort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-    permissionMode: ClaudePermissionModeSchema.default("manual")
+    permissionMode: ClaudePermissionModeSchema.default("auto")
   }).strict()
 ]);
 var DispatcherSourceSchema = external_exports.enum(["web", "schedule", "system_notification", "api"]);
@@ -19917,6 +20012,11 @@ var ApprovalSchema = external_exports.object({
   resolutionNote: external_exports.string().nullable()
 });
 var ApprovalListSchema = external_exports.object({ approvals: external_exports.array(ApprovalSchema) });
+var DispatcherProposalSchema = external_exports.object({
+  run: RunSchema,
+  approval: ApprovalSchema,
+  target: ClaudeAgentSessionSchema
+});
 var StartAgentRunSchema = external_exports.object({
   taskId: external_exports.uuid().nullable().optional(),
   title: external_exports.string().trim().min(1).max(240),
@@ -20031,6 +20131,90 @@ var AssistantNotificationSchema = external_exports.object({
 var AssistantNotificationListSchema = external_exports.object({
   notifications: external_exports.array(AssistantNotificationSchema)
 });
+var workspaceItemTypes = [
+  "task",
+  "approval",
+  "notification",
+  "claude_session",
+  "run",
+  "schedule",
+  "ability",
+  "browser_job",
+  "memory"
+];
+var WorkspaceItemTypeSchema = external_exports.enum(workspaceItemTypes);
+var WorkspaceCanvasEntityTypeSchema = external_exports.enum([...workspaceItemTypes, "folder", "browser_worker"]);
+var workspaceFolderIcons = [
+  "folder",
+  "briefcase",
+  "star",
+  "code",
+  "idea",
+  "rocket",
+  "archive",
+  "heart"
+];
+var WorkspaceFolderIconSchema = external_exports.enum(workspaceFolderIcons);
+var WorkspaceFolderSchema = external_exports.object({
+  id: external_exports.uuid(),
+  name: external_exports.string().min(1),
+  icon: WorkspaceFolderIconSchema,
+  createdAt: external_exports.iso.datetime(),
+  updatedAt: external_exports.iso.datetime(),
+  revision: external_exports.number().int().positive()
+});
+var WorkspaceFolderListSchema = external_exports.object({ folders: external_exports.array(WorkspaceFolderSchema) });
+var CreateWorkspaceFolderSchema = external_exports.object({
+  name: external_exports.string().trim().min(1).max(120),
+  icon: WorkspaceFolderIconSchema.default("folder")
+}).strict();
+var UpdateWorkspaceFolderSchema = external_exports.object({
+  name: external_exports.string().trim().min(1).max(120).optional(),
+  icon: WorkspaceFolderIconSchema.optional(),
+  expectedRevision: external_exports.number().int().positive()
+}).strict().refine((value) => value.name !== void 0 || value.icon !== void 0, {
+  message: "A folder name or icon must be supplied"
+});
+var WorkspaceItemPlacementSchema = external_exports.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: external_exports.string().min(1).max(500),
+  folderId: external_exports.uuid(),
+  updatedAt: external_exports.iso.datetime()
+});
+var WorkspaceItemPlacementListSchema = external_exports.object({
+  placements: external_exports.array(WorkspaceItemPlacementSchema)
+});
+var MoveWorkspaceItemSchema = external_exports.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: external_exports.string().trim().min(1).max(500),
+  folderId: external_exports.uuid().nullable()
+}).strict();
+var WorkspaceTrashedItemSchema = external_exports.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: external_exports.string().min(1).max(500),
+  trashedAt: external_exports.iso.datetime()
+});
+var WorkspaceTrashedItemListSchema = external_exports.object({
+  items: external_exports.array(WorkspaceTrashedItemSchema)
+});
+var TrashWorkspaceItemSchema = external_exports.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: external_exports.string().trim().min(1).max(500)
+}).strict();
+var WorkspaceItemLayoutSchema = external_exports.object({
+  itemType: WorkspaceCanvasEntityTypeSchema,
+  itemId: external_exports.string().min(1).max(500),
+  x: external_exports.number().int().min(-1e5).max(1e5),
+  y: external_exports.number().int().min(-1e5).max(1e5),
+  updatedAt: external_exports.iso.datetime()
+});
+var WorkspaceItemLayoutListSchema = external_exports.object({ layouts: external_exports.array(WorkspaceItemLayoutSchema) });
+var SetWorkspaceItemLayoutSchema = WorkspaceItemLayoutSchema.pick({
+  itemType: true,
+  itemId: true,
+  x: true,
+  y: true
+}).strict();
 var memoryStatuses = ["active", "archived"];
 var MemoryStatusSchema = external_exports.enum(memoryStatuses);
 var MemoryProvenanceSchema = external_exports.object({

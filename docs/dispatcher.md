@@ -26,7 +26,9 @@ boundaries.
    delivery receipt; an ambiguous, refused, or otherwise unsent message fails the run even when
    the bridge process itself exits with code zero.
 5. The controller reads relevant durable state, gathers missing facts, then either calls a narrow
-   tool directly or delegates independently verifiable multi-step work.
+   tool directly or delegates independently verifiable multi-step work. In the default recipe the
+   controller is the fixed Claude team lead; teammates use panes in the same tmux session and
+   inherit the lead's permission mode.
 6. The controller ends the turn with a `cc_assistant_dispatch_result` JSON block whose status is
    `completed`, `running`, `waiting_approval`, `needs_input`, or `failed`.
 
@@ -71,7 +73,8 @@ domain-specific states into eight presentation statuses:
 Collapsed panes show type, status icon, color, and a short title. Selecting a pane expands its
 width first to expose a one-sentence description, followed by exact details and contextual
 controls. Claude sessions
-support messaging, continuation, background stop/respawn, and copying the native attach command;
+support messaging, continuation, background stop/respawn, opening an attached terminal, and a
+movable browser transcript preview;
 tasks, triggers, Calendar/Slack jobs, abilities, runs, approvals, notifications, and memories
 expose their relevant operations. Protected operations remain proposals until explicitly approved.
 Pane coordinates are stored in `workspace_item_layouts`; dropping a pane elsewhere on the canvas
@@ -90,10 +93,17 @@ sessions, and successful or cancelled browser jobs without deleting their durabl
 or blocked work stays on the base canvas because it still needs attention. Memories, abilities, and
 configured triggers remain visible because completion does not make them obsolete.
 
-The dispatcher header has Manual, Automatic, and Bypass permission buttons. The selection is stored
-as a browser preference and applies when **Start controller** or **Start replacement controller** is
-used. Starting still creates a one-time approval; changing the selector does not silently alter an
-already-running Claude process. Bypass mode displays an explicit isolation warning.
+The dispatcher header has Manual, Automatic, and Bypass permission buttons. The selection is saved
+to the active runtime recipe and applies after **Repair & connect** or **Relaunch dispatcher**.
+Starting still creates a one-time approval; changing the selector does not silently alter an
+already-running Claude process. Bypass mode displays an explicit isolation warning. The same area
+offers approved terminal launch, repair, and allowlisted slash commands plus the complete safe
+recipe editor. Next-launch daemon settings are editable; current effective values are shown
+read-only because they require a full daemon restart.
+
+Transcript previews are independent movable windows. Background sessions read Claude's supported
+logs; interactive recipe sessions capture a bounded tmux scrollback view. Windows can refresh,
+collapse, close, or minimize into the bottom session taskbar. They never modify Claude transcripts.
 
 Status icons animate according to meaning: active work rotates, waiting work pulses, attention
 items signal briefly, idle items breathe, and completed items acknowledge periodically. The
@@ -104,7 +114,7 @@ single effectively static frame when the operating system requests reduced motio
 ## Drag, folders, trash, and themes
 
 Every pane backed by a durable record can be dragged from anywhere on its collapsed card. Drag an
-empty canvas region to marquee-select icons, or use Ctrl/⌘-click to build a discontinuous selection;
+empty canvas region to pan; Shift-click icons to build a discontinuous selection;
 dragging a selected icon moves and applies folder/trash drops to the selection. Drop one item onto another
 to create a folder containing both items, or drop onto an existing folder to add it. Folder icons
 carry a count badge. Opening a folder shows only its members; its embedded **Back to base** target
@@ -113,7 +123,8 @@ are filed there automatically. Folder icon selection, renaming, deletion, and me
 authenticated daemon API. They are stored in `workspace_folders` and
 `workspace_item_placements`, and changes publish normal SSE events. Deleting a folder preserves its
 contents by returning them to the base workspace. A right-click menu exposes Open/Delete for folders
-and Remove from folder/Move to Trash/Restore for items as appropriate.
+and Remove from folder/Move to Trash/Restore for items as appropriate. When the clicked icon is
+already selected, the menu applies to the whole selection and can group selected items.
 
 Trash accepts every ordinary canvas item. A drop writes a `workspace_trashed_items` marker and removes
 folder placement without deleting or mutating the underlying task, run, approval, notification,

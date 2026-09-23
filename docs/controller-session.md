@@ -49,7 +49,14 @@ pnpm build
 pnpm start
 ```
 
-In another terminal:
+The default runtime recipe already creates the dedicated interactive controller in the
+`cc-assistant:dispatcher` tmux window. Attach to it with:
+
+```bash
+tmux attach-session -t cc-assistant
+```
+
+For a standalone controller outside the recipe, use another terminal:
 
 ```bash
 pnpm controller
@@ -100,12 +107,12 @@ servers declared by this checkout's `.mcp.json`; it does not approve arbitrary u
 servers. Running the launcher is the explicit trust action for this repository. If `.mcp.json`
 changes, inspect it before launching a new controller.
 
-Choose a permission mode explicitly when the default manual prompts are not appropriate:
+Choose a permission mode explicitly when the default automatic policy is not appropriate:
 
 | cc-assistant profile | Claude Code value | Behavior |
 | --- | --- | --- |
-| Manual | `manual` | Prompts according to the normal permission rules; this is the default. |
-| Automatic | `auto` | Claude Code automatically decides which tool uses can proceed under its active policy. |
+| Manual | `manual` | Prompts according to the normal permission rules. |
+| Automatic | `auto` | Claude Code automatically decides which tool uses can proceed under its active policy; this is the default. |
 | Bypass | `bypassPermissions` | Removes Claude Code permission prompts; use only inside a separately isolated environment. |
 
 ```bash

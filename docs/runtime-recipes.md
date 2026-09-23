@@ -1,0 +1,98 @@
+# Runtime recipes and tmux topology
+
+Runtime recipes are versioned, validated process-topology configurations. The committed
+`recipes/default.json` is the baseline; the dashboard writes the active local override to
+`<data-dir>/runtime-config.json`. The override contains no tokens or browser credentials.
+
+## Default recipe
+
+`pnpm start` (or `npm start`) now starts the `default` recipe rather than only the daemon. The
+launcher creates or repairs a detached tmux session named `cc-assistant` with:
+
+```text
+tmux session: cc-assistant
+├── daemon      node apps/daemon/dist/index.js
+└── dispatcher  interactive Claude Code lead
+                --permission-mode auto
+                --teammate-mode tmux
+                project MCP bridge (spawned by Claude over stdio)
+```
+
+The MCP server is not a third permanent daemon. Claude Code starts the project MCP bridge as a
+stdio child of each Claude session that loads `.mcp.json`. Durable state remains in the daemon.
+
+With `autoRepair` enabled, the tmux window command restarts the daemon or dispatcher after an
+unexpected exit. An intentional **Relaunch dispatcher** action kills and recreates only the
+dispatcher window, loading the latest recipe. Stop the whole recipe explicitly with
+`tmux kill-session -t cc-assistant` when desired.
+
+The dispatcher is the fixed lead. Claude Code agent teams created by that lead inherit its
+permission mode and use tmux split panes. Independent sessions started through
+`claude_session_dispatch` remain Claude background sessions: they use Claude's supported
+`attach`, `logs`, `respawn`, and `stop` interfaces and are not mislabeled as team panes.
+
+## Commands
+
+```bash
+pnpm build
+pnpm start                 # start/repair the default recipe, then return
+pnpm recipe:status         # inspect tmux windows and daemon health
+pnpm recipe:list           # list committed recipes
+pnpm recipe -- repair
+pnpm recipe -- relaunch-dispatcher
+tmux attach-session -t cc-assistant
+```
+
+Use `npm run ...` equivalents when using npm. `pnpm start` is detached by design; use the tmux
+attach command or the dashboard's approved **Open terminal** action for the interactive view.
+`pnpm start:daemon` remains available for a daemon-only production process or an external service
+manager. Development remains `pnpm dev` (daemon plus Vite, no automatic tmux controller).
+
+To add a recipe, copy `recipes/default.json`, give it a lowercase-hyphenated `id`, and change only
+the validated fields. Start it with `pnpm recipe -- start <id>`. A local override applies when its
+`id` matches the selected committed recipe; another recipe ID still loads its own file. Remove or
+rename `runtime-config.json` if you intentionally want to return to the committed baseline.
+
+## Dashboard controls
+
+The Simplified dispatcher header exposes:
+
+- Manual, Automatic, and Bypass defaults. A selection is saved immediately and applies after a
+  dispatcher relaunch; it does not change the permissions of a process already running.
+- **Repair**, **Relaunch dispatcher**, and **Open terminal**. Each creates an exact durable command
+  approval before local execution.
+- a validated runtime recipe editor for tmux names, Claude name/model/effort, teammate display,
+  sandbox, Remote Control, restart policy, graphical terminal launcher, and next-launch daemon
+  host, port, allowed roots, managed-agent login preference, and browser-worker limits;
+- read-only current daemon values beside the editable next-launch recipe. Process-level daemon
+  changes require a full daemon restart; token and data-directory bootstrap remain outside
+  browser-editable configuration so the service cannot strand its own clients;
+- a one-line slash-command field. The runtime accepts only `/agents`, `/compact`, `/config`,
+  `/context`, `/doctor`, `/mcp`, `/memory`, `/permissions`, `/reload-plugins`, `/rewind`, `/status`,
+  and `/tasks`. Newlines and arbitrary terminal input are rejected, and execution requires the
+  normal approval.
+
+Cross-session messaging cannot execute a slash command. The allowlisted slash path therefore uses
+`tmux send-keys -l` against the recipe-owned dispatcher pane after approval. This is the only
+terminal-input exception; normal prompts continue through Claude Code's `ListAgents`/`SendMessage`
+boundary.
+
+Every Claude icon can open a browser transcript window. Background sessions use `claude logs`;
+interactive recipe sessions use a bounded read-only tmux pane capture. Transcript windows move,
+collapse, refresh, close, and minimize into the bottom session taskbar. No transcript file is
+edited or imported into assistant state.
+
+## Recovery
+
+1. Use **Repair** or `pnpm recipe -- repair` to recreate missing recipe windows.
+2. Use **Relaunch dispatcher** when the daemon is healthy but the lead Claude process is stale.
+3. Use **Open terminal** to attach and answer an interactive Claude prompt directly.
+4. Run `pnpm recipe:status`, `claude agents --json --all`, and `claude doctor` for independent
+   evidence when the dashboard and Claude inventory disagree.
+5. A daemon already listening outside tmux is reused rather than killed. The recipe can still own
+   the dispatcher; restart later with no competing daemon if you want both processes under tmux.
+
+Claude Code documents tmux split panes as an agent-team display mode, background session attachment
+through `claude attach`, logs through `claude logs`, and permission inheritance from the lead. The
+slash controls are interactive session commands; `/compact` summarizes the current conversation
+to free context rather than starting a new conversation.

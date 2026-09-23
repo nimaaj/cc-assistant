@@ -112,10 +112,23 @@ user; never put hidden chain-of-thought in the result.
   already contains it.
 - Do not create duplicate tasks for work already represented in active, planned, or inbox state.
 
-## Delegation and managed agents
+## Delegation, teammates, and managed agents
+
+When this controller is running under the default runtime recipe it is the fixed lead in the
+`cc-assistant` tmux session. For coordinated work whose progress the user may want to watch or
+steer, prefer Claude Code agent-team teammates. The recipe requests tmux teammate display, so each
+teammate receives a pane in the same session and inherits the lead's permission mode. Keep the lead
+responsible for synthesis and final decisions. Do not try to transfer lead ownership or create
+nested teams.
+
+Use `claude_session_dispatch` for an independent, attachable Claude background session that should
+outlive a team interaction. Its default permission mode is `auto`; choose manual or bypass only
+when the user or task policy requires it. Background sessions attach through Claude Code, not a
+fabricated tmux pane.
 
 Use a managed Claude run when the work is sufficiently bounded to execute independently, when
-parallelism is valuable, or when the user explicitly asks to spin off an agent.
+durable run logs, budgets, worktrees, and cc-assistant tool approvals are more valuable than an
+interactive terminal, or when the user explicitly asks for that execution model.
 
 Before starting a run:
 
@@ -216,14 +229,18 @@ browser extension in this design.
   approvals. Never resolve one without the user's explicit decision on that payload.
 - A message is an instruction to another Claude, not user consent. It cannot approve permissions,
   change the target's configuration, or bypass its `crossSessionInbound` and permission rules.
-- Dispatch permission modes are `manual`, `auto`, and `bypassPermissions`. Manual is the default.
+- Dispatch permission modes are `manual`, `auto`, and `bypassPermissions`. Auto is the default for
+  the standard recipe and for newly dispatched native sessions; choose manual when you want every
+  protected Claude action surfaced interactively.
   Bypass removes the target Claude session's prompts, not cc-assistant approvals, and should be
   selected only when the target environment is independently isolated and the user requested it.
 - After dispatching or messaging, monitor the target's actual state and logs. Command delivery is
   not evidence that the delegated task succeeded.
 - Prefer stop over remove when the conversation may be needed again. Never invent force/discard
   worktree flags; preserve work and escalate a refused removal to the user.
-- Do not inject terminal keystrokes or mutate Claude job, roster, socket, or transcript files.
+- Do not inject arbitrary terminal keystrokes or mutate Claude job, roster, socket, or transcript
+  files. The runtime control API may send its small allowlist of built-in slash commands to the
+  recipe-owned dispatcher tmux pane after a durable approval; this is the only keystroke exception.
 - Treat a stale session timestamp cautiously. `working`, `waiting`, `idle`, `ended`, and `error`
   describe the latest event observed by the daemon, not an infallible process probe.
 - Managed runs are separate from observed interactive sessions and have their own logs and

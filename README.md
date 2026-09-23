@@ -36,6 +36,7 @@ For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md
 - Claude Code lifecycle hooks and live session-state tracking.
 - A developer CLI for state inspection, mutation, export, and raw API calls.
 - A two-view responsive dashboard: a single-field dispatcher with an animated, zoomable spatial canvas, durable free-position panes, desktop multi-selection, automatic drag-to-group folders, reversible all-item trash, contextual menus, diagnostics, six color themes, plus the full workspace for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
+- Versioned runtime recipes with a default persistent tmux topology, an auto-restarting main dispatcher, Claude team panes, repair/relaunch/terminal controls, safe slash commands, and movable/minimizable transcript previews.
 
 ## Requirements
 
@@ -83,8 +84,8 @@ dispatcher runs and approvals. Clicking a pane opens contextual controls, or ena
 hover** to inspect items without clicking; expanded panes are raised above neighboring icons. Claude
 sessions can be messaged, continued, stopped, respawned, or attached from a native terminal;
 tasks, triggers, browser jobs, abilities, runs, approvals, notifications, and memories expose
-their relevant operations. Drag from anywhere on a collapsed card; drag the empty canvas to marquee-select,
-or use Ctrl/⌘-click for a discontinuous selection. Right-click items and folders for contextual
+their relevant operations. Drag from anywhere on a collapsed card; drag the empty canvas to pan,
+and Shift-click for a discontinuous selection. Right-click items and folders for contextual
 move, restore, open, and delete actions. Protected work still enters the normal approval flow.
 Submit the dispatcher with its button or `Ctrl+Enter`/`⌘+Enter`. Dropping any ordinary item or
 selection onto **Trash** removes it from the working canvas without deleting its domain record;
@@ -112,7 +113,11 @@ pnpm build
 pnpm start
 ```
 
-The production daemon serves both the authenticated API and the built dashboard at [http://127.0.0.1:4317](http://127.0.0.1:4317). No Vite process is required. The macOS LaunchAgent uses this production entrypoint, so the dashboard remains available after login whenever that service is installed.
+The default recipe starts the production daemon and an interactive main dispatcher in the
+`cc-assistant` tmux session, then returns. The daemon serves both the authenticated API and built
+dashboard at [http://127.0.0.1:4317](http://127.0.0.1:4317); no Vite process is required. Attach with
+`tmux attach-session -t cc-assistant`. Use `pnpm start:daemon` for daemon-only supervision. See
+[Runtime recipes and tmux topology](docs/runtime-recipes.md).
 
 ## Connect Claude Code
 
@@ -129,7 +134,7 @@ pnpm controller
 To run that controller as a native background Claude Code session and attach to its terminal later:
 
 ```bash
-pnpm controller:bg                 # manual permission mode
+pnpm controller:bg                 # automatic permission mode (default)
 pnpm controller:bg:auto            # automatic mode
 pnpm controller:bg:bypass          # bypass mode; isolated environments only
 # Claude prints an ID, then:
@@ -184,7 +189,10 @@ pnpm cca claude-session dispatch "Investigate the failing test" --cwd "$PWD" --n
 pnpm cca claude-session stop <id-or-name>
 ```
 
-Messages use Claude Code's native `ListAgents`/`SendMessage` boundary. The daemon never injects terminal keystrokes and never edits `~/.claude/jobs` or transcript files. See [Claude session orchestration](docs/claude-session-orchestration.md) for the supported operations and safety model.
+Messages use Claude Code's native `ListAgents`/`SendMessage` boundary. The only terminal-input
+exception is an approved, one-line, allowlisted slash command sent to the recipe-owned dispatcher
+tmux pane. The daemon never edits Claude job, roster, socket, or transcript files. See
+[Claude session orchestration](docs/claude-session-orchestration.md) for the supported operations and safety model.
 
 ## Direct state control
 

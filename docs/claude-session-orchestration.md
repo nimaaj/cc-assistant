@@ -27,14 +27,16 @@ Managed Agent SDK runs remain a third category. They are owned by cc-assistant a
 The remove operation deliberately exposes no force or discard flags. If Claude Code refuses removal because a worktree contains changes, inspect and preserve the work manually.
 
 Dispatch accepts `manual`, `auto`, or `bypassPermissions` and passes the selected value to Claude
-Code's `--permission-mode` flag. Manual is the default. Bypass mode is intentionally conspicuous in
+Code's `--permission-mode` flag. Auto is the default. Bypass mode is intentionally conspicuous in
 the dashboard and should be used only when the target working directory and execution environment
 are independently isolated. The mode changes the spawned Claude session's own permission behavior;
 it does not skip the cc-assistant approval required to dispatch it.
 
-The dedicated main controller uses the same native mechanism. Start it with `pnpm controller:bg`,
-then run `claude attach <short-id>` for a full interactive Claude Code terminal. cc-assistant does
-not emulate that terminal or inject keystrokes.
+The default recipe instead owns an interactive main controller in the
+`cc-assistant:dispatcher` tmux window. Attach with `tmux attach-session -t cc-assistant`.
+Agent-team teammates created by that lead use tmux split panes and inherit the lead's permission
+mode. Standalone `pnpm controller:bg` remains available; use `claude attach <short-id>` for its full
+interactive terminal.
 
 ## Message delivery
 
@@ -93,9 +95,17 @@ pnpm cca claude-session stop|respawn|remove <id-or-name>
 
 Mutation commands return the proposed run and approval. Resolve it in the dashboard or with `pnpm cca approval approve <approval-id>`.
 
+## Tmux and transcript boundary
+
+The runtime status API inspects only the configured tmux session. Transcript preview uses
+`claude logs` for background sessions or bounded `tmux capture-pane` output for a safely matched
+interactive pane. Terminal launch, repair, relaunch, and slash commands first create durable
+command approvals. Slash commands are restricted to a one-line built-in allowlist and target only
+the recipe-owned dispatcher pane. Arbitrary prompt delivery never uses terminal input.
+
 ## Explicit non-goals
 
-- no terminal keystroke injection, tmux control, or PTY scraping;
+- no arbitrary terminal keystroke injection, generic tmux command endpoint, or writable browser terminal emulator;
 - no writes to `~/.claude/jobs`, roster files, or transcript JSONL;
 - no answering a target session's permission dialog on the user's behalf;
 - no force-removing a worktree with unpushed or uncommitted work;

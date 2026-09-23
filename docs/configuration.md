@@ -1,6 +1,9 @@
 # Configuration
 
-cc-assistant is configured through environment variables. The repository's `.env.example` is a reference file; the current scripts do not automatically load `.env`. Export values in the shell or configure them in the process supervisor before starting the daemon, CLI, MCP bridge, or installer.
+cc-assistant uses two configuration layers. Environment variables configure daemon process
+boundaries. A versioned runtime recipe configures the tmux topology and main Claude dispatcher.
+The repository's `.env.example` is a reference file; scripts do not automatically load `.env`.
+Export values before starting the daemon, CLI, MCP bridge, recipe, or installer.
 
 Claude Code controller settings are separate from daemon environment variables. The shared hook
 configuration lives in `.claude/settings.json`. The launchers pass either
@@ -9,8 +12,23 @@ configuration lives in `.claude/settings.json`. The launchers pass either
 enable only the project MCP servers declared by this checkout so non-interactive background starts
 do not wait at a trust prompt. See [the controller-session guide](controller-session.md).
 Background controller launchers select Claude Code permission modes with CLI arguments rather than
-daemon environment variables; `manual` is the default, with explicit `auto` and
+daemon environment variables; `auto` is the default, with explicit `manual` and
 `bypassPermissions` profiles.
+
+## Runtime recipe
+
+The committed baseline is `recipes/default.json`. The dashboard's **Runtime recipe & app
+configuration** editor writes a validated local override to `<data-dir>/runtime-config.json`.
+It covers tmux/session/window names, dispatcher name and permission mode, teammate display,
+model, effort, sandbox, Claude Remote Control, restart policy, graphical terminal launcher, and
+the daemon values used on the next recipe launch: host, port, allowed roots, login preferences,
+and browser-worker limits. It cannot write tokens, browser cookies, arbitrary commands, or move
+the active data directory from inside that same directory.
+
+Recipe changes apply to newly created processes. Save, then use **Relaunch dispatcher** for
+dispatcher changes. Host, port, allowed roots, and browser/managed-agent settings require a full
+daemon restart through the recipe; current effective values remain visible read-only. Data-directory
+selection is still an environment/bootstrap decision. See [Runtime recipes](runtime-recipes.md).
 
 ## Runtime variables
 
@@ -100,6 +118,7 @@ Environment changes require a daemon restart. MCP-only path changes also require
 | `worktrees/` | Managed-run service | Ephemeral working copies; source branches remain in their repositories |
 | `bin/notification-watcher` | macOS installer | Rebuild from source rather than treating as primary data |
 | `*.log` | Service helpers | Operational logs; rotate externally if needed |
+| `runtime-config.json` | Runtime recipe editor | Local process-topology override; contains no credentials |
 
 The daemon is the only supported writer to SQLite. Use the CLI or authenticated API for state changes.
 Simplified-view folder definitions, item membership, reversible trash markers, and free-position canvas coordinates are
@@ -107,6 +126,6 @@ included in `assistant.sqlite`. The active color theme, hover-expansion preferen
 viewport are intentionally UI-local and stored as `cc-assistant-theme`,
 `cc-assistant-expand-on-hover`, and `cc-assistant-canvas-viewport` in browser `localStorage`;
 none contains credentials or assistant records.
-The Simplified-view controller launcher also stores its last explicit mode under
-`cc-assistant-permission-mode`; this preference never changes the permission mode of an existing
-Claude session.
+The Simplified view mirrors the selected permission mode under
+`cc-assistant-permission-mode` for immediate presentation, while the authoritative next-launch
+value is saved in `runtime-config.json`. Neither changes an existing Claude process.

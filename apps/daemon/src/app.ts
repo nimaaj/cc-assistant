@@ -9,6 +9,7 @@ import {
   ClaudeSessionControlSchema,
   CreateMemorySchema,
   DispatcherRequestSchema,
+  isMainControllerName,
   IngestMemorySchema,
   MemoryImportPlanSchema,
   MemoryMarkdownExportSchema,
@@ -21,6 +22,8 @@ import {
   CreateTaskSchema,
   ProposeCommandSchema,
   ResolveApprovalSchema,
+  RuntimeControlSchema,
+  RuntimeTranscriptSchema,
   RunStatusSchema,
   StartAgentRunSchema,
   TaskStatusSchema,
@@ -49,6 +52,7 @@ import { NativeService } from "./native-service.js";
 import { MemoryNotFoundError, MemoryRepository, MemoryRevisionConflictError } from "./memory-repository.js";
 import { parseMemoryMarkdown, serializeMemoryMarkdown, type ImportedMemory } from "./memory-markdown.js";
 import { SessionRepository } from "./session-repository.js";
+import { RuntimeService } from "./runtime-service.js";
 import {
   RevisionConflictError,
   TaskNotFoundError,
@@ -162,6 +166,7 @@ export interface AppDependencies {
   browserAutomationService?: BrowserAutomationService;
   browserAgentQuery?: BrowserAgentQuery;
   claudeSessionControlService?: ClaudeSessionControlService;
+  runtimeService?: RuntimeService;
   nativeService?: NativeService;
   memoryRepository?: MemoryRepository;
   eventHub?: EventHub;
@@ -209,6 +214,7 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     dependencies.executionService ?? new ExecutionService(executionRepository, dependencies.config);
   const claudeSessionControlService = dependencies.claudeSessionControlService ??
     new ClaudeSessionControlService(executionService, dependencies.config);
+  const runtimeService = dependencies.runtimeService ?? new RuntimeService(dependencies.config);
   const assistantRepository = dependencies.assistantRepository ??
     new AssistantRepository(dependencies.config.databasePath, (event) => eventHub.publish(event));
   const nativeService = dependencies.nativeService ?? new NativeService();
@@ -320,6 +326,40 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     dataDir: dependencies.config.dataDir,
   }));
 
+  app.get("/api/runtime/config", async () => ({
+    recipe: await runtimeService.recipe(),
+    daemon: {
+      platform: process.platform,
+      host: dependencies.config.host,
+      port: dependencies.config.port,
+      allowedRoots: dependencies.config.allowedRoots,
+      dataDir: dependencies.config.dataDir,
+      browser: dependencies.config.browser,
+      managedAgent: dependencies.config.managedAgent,
+    },
+  }));
+
+  app.put("/api/runtime/config", async (request) => ({ recipe: await runtimeService.saveRecipe(request.body) }));
+
+  app.get("/api/runtime/status", async () => {
+    let controller = null;
+    try {
+      controller = (await claudeSessionControlService.list(false))
+        .filter((session) => session.pid && isMainControllerName(session.name))
+        .sort((left, right) => right.startedAt - left.startedAt)[0] ?? null;
+    } catch { /* Runtime health remains useful when Claude Code inventory is unavailable. */ }
+    return runtimeService.status(controller);
+  });
+
+  app.post("/api/runtime/control", async (request, reply) => {
+    const input = RuntimeControlSchema.parse(request.body);
+    const target = input.action === "open_session_terminal"
+      ? await claudeSessionControlService.get(input.target)
+      : undefined;
+    const proposed = await runtimeService.propose(executionService, input, target);
+    return reply.code(202).send(proposed);
+  });
+
   app.post("/api/session", async (request, reply) => {
     const { token } = SessionSchema.parse(request.body);
     if (!secretsMatch(token, dependencies.config.accessToken)) {
@@ -414,6 +454,27 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   app.get("/api/claude/sessions/:reference/logs", async (request) => {
     const reference = z.object({ reference: z.string().min(1) }).parse(request.params).reference;
     return { logs: await claudeSessionControlService.logs(reference) };
+  });
+
+  app.get("/api/claude/sessions/:reference/transcript", async (request) => {
+    const reference = z.object({ reference: z.string().min(1) }).parse(request.params).reference;
+    const session = await claudeSessionControlService.get(reference);
+    const source = session.kind === "background" && session.id ? "claude_logs" as const : "tmux" as const;
+    try {
+      if (source === "claude_logs") {
+        return RuntimeTranscriptSchema.parse({
+          reference, source, available: true, content: await claudeSessionControlService.logs(reference), error: null,
+          capturedAt: new Date().toISOString(),
+        });
+      }
+      return runtimeService.capturePane(reference, session);
+    } catch (error) {
+      return RuntimeTranscriptSchema.parse({
+        reference, source, available: false, content: "",
+        error: error instanceof Error ? error.message : "Transcript source is unavailable",
+        capturedAt: new Date().toISOString(),
+      });
+    }
   });
 
   app.post("/api/claude/sessions/control", async (request, reply) => {

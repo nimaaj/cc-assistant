@@ -22,13 +22,15 @@ install again with the chosen manager. Never hand-edit either lockfile.
 | Reproducible install | `pnpm install --frozen-lockfile` | `npm ci` |
 | Build all workspaces | `pnpm build` | `npm run build` |
 | Development daemon and UI | `pnpm dev` | `npm run dev` |
-| Production daemon | `pnpm start` | `npm start` |
+| Default tmux recipe (daemon + dispatcher) | `pnpm start` | `npm start` |
+| Production daemon only | `pnpm start:daemon` | `npm run start:daemon` |
+| Recipe status | `pnpm recipe:status` | `npm run recipe:status` |
 | Test | `pnpm test` | `npm test` |
 | Type-check | `pnpm typecheck` | `npm run typecheck` |
 | Offline doctor | `pnpm assistant:doctor --offline` | `npm run assistant:doctor -- --offline` |
 | Developer CLI | `pnpm cca status` | `npm run cca -- status` |
 | Controller | `pnpm controller` | `npm run controller` |
-| Background controller (manual) | `pnpm controller:bg` | `npm run controller:bg` |
+| Background controller (automatic default) | `pnpm controller:bg` | `npm run controller:bg` |
 | Background controller (automatic) | `pnpm controller:bg:auto` | `npm run controller:bg:auto` |
 | Background controller (bypass) | `pnpm controller:bg:bypass` | `npm run controller:bg:bypass` |
 | Sandboxed controller | `pnpm controller:sandbox` | `npm run controller:sandbox` |

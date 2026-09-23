@@ -19,7 +19,8 @@ export function usage() {
 
 Usage:
   node scripts/start-controller.mjs [--background] [--permission-mode <mode>]
-                                    [--sandbox] [--no-bootstrap] [--dry-run] [-- <claude args>]
+                                    [--controller-name <name>] [--sandbox]
+                                    [--no-bootstrap] [--dry-run] [-- <claude args>]
 
 Options:
   --background    Start a named background Claude Code session. Claude prints a short ID;
@@ -27,6 +28,8 @@ Options:
   --permission-mode <mode>
                   manual, auto, or bypassPermissions. Bypass removes Claude's permission
                   prompts and should be used only in a separately isolated environment.
+  --controller-name <name>
+                  Override the validated Claude display name used by runtime recipes.
   --sandbox       Use strict built-in Bash sandboxing. Sandbox startup failure is fatal,
                   and Claude cannot retry a blocked command outside the sandbox.
   --no-bootstrap  Start the session without sending the controller initialization prompt.
@@ -55,7 +58,8 @@ async function writeStdout(value) {
 export function buildControllerLaunch(input, identity = { now: Date.now(), pid: process.pid }) {
   let sandbox = false;
   let background = false;
-  let permissionMode = "manual";
+  let permissionMode = "auto";
+  let controllerNameOverride;
   let noBootstrap = false;
   let dryRun = false;
   let help = false;
@@ -77,6 +81,14 @@ export function buildControllerLaunch(input, identity = { now: Date.now(), pid: 
       permissionMode = candidate;
       index += 1;
     }
+    else if (value === "--controller-name") {
+      const candidate = input[index + 1];
+      if (!candidate || !/^[A-Za-z0-9_-]{1,120}$/.test(candidate)) {
+        throw new Error("--controller-name must contain only letters, numbers, underscores, or hyphens");
+      }
+      controllerNameOverride = candidate;
+      index += 1;
+    }
     else if (value === "--no-bootstrap") noBootstrap = true;
     else if (value === "--dry-run") dryRun = true;
     else if (value === "--help" || value === "-h") help = true;
@@ -86,7 +98,7 @@ export function buildControllerLaunch(input, identity = { now: Date.now(), pid: 
   const args = [];
   const settings = sandbox ? sandboxSettings : controllerSettings;
   if (background) args.push("--bg");
-  const baseName = sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller";
+  const baseName = controllerNameOverride ?? (sandbox ? "cc-assistant-controller-sandbox" : "cc-assistant-controller");
   const controllerName = background
     ? `${baseName}-${identity.now.toString(36)}-${identity.pid.toString(36)}`
     : baseName;

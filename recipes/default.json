@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "id": "default",
+  "name": "Default tmux workspace",
+  "description": "Runs the daemon and a persistent Claude Code dispatcher in one tmux session. Claude agent teams use split panes in that session.",
+  "tmuxSession": "cc-assistant",
+  "daemonWindow": "daemon",
+  "dispatcherWindow": "dispatcher",
+  "dispatcherName": "cc-assistant-controller",
+  "dispatcherPermissionMode": "auto",
+  "dispatcherSandbox": false,
+  "dispatcherTeammateMode": "tmux",
+  "dispatcherModel": null,
+  "dispatcherEffort": "high",
+  "dispatcherRemoteControl": false,
+  "autoRepair": true,
+  "terminalLauncher": "auto",
+  "daemon": {
+    "host": "127.0.0.1",
+    "port": 4317,
+    "allowedRoots": [],
+    "managedAgentUseClaudeLogin": true,
+    "browserEnabled": true,
+    "browserUseClaudeLogin": true,
+    "browserModel": "sonnet",
+    "browserEffort": "low",
+    "browserMaxTurns": 12,
+    "browserMaxBudgetUsd": 1
+  }
+}

@@ -284,7 +284,7 @@ function ClaudeSessionControlPanel({ sessions, defaultCwd, onChange }: {
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [prompt, setPrompt] = useState("");
   const [name, setName] = useState("");
-  const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>("manual");
+  const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>("auto");
   const [busy, setBusy] = useState<string>();
   const propose = async (key: string, input: Parameters<typeof controlClaudeSession>[0]): Promise<void> => {
     setBusy(key);

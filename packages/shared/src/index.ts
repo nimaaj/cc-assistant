@@ -127,6 +127,97 @@ export const ClaudeAgentSessionListSchema = z.object({ sessions: z.array(ClaudeA
 const ClaudeSessionTargetSchema = z.string().trim().min(1).max(240);
 export const ClaudePermissionModeSchema = z.enum(["manual", "auto", "bypassPermissions"]);
 export type ClaudePermissionMode = z.infer<typeof ClaudePermissionModeSchema>;
+
+export const RuntimeRecipeSchema = z.object({
+  version: z.literal(1),
+  id: z.string().trim().min(1).max(80).regex(/^[a-z0-9][a-z0-9-]*$/),
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(2_000),
+  tmuxSession: z.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+  daemonWindow: z.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+  dispatcherWindow: z.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
+  dispatcherName: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/),
+  dispatcherPermissionMode: ClaudePermissionModeSchema.default("auto"),
+  dispatcherSandbox: z.boolean().default(false),
+  dispatcherTeammateMode: z.enum(["tmux", "in-process", "auto"]).default("tmux"),
+  dispatcherModel: z.string().trim().min(1).max(120).nullable().default(null),
+  dispatcherEffort: z.enum(["low", "medium", "high", "xhigh", "max"]).default("high"),
+  dispatcherRemoteControl: z.boolean().default(false),
+  autoRepair: z.boolean().default(true),
+  terminalLauncher: z.enum(["auto", "xdg-terminal-exec", "gnome-terminal", "konsole", "xterm"]).default("auto"),
+  daemon: z.object({
+    host: z.string().trim().min(1).max(255).default("127.0.0.1"),
+    port: z.number().int().min(1).max(65_535).default(4317),
+    allowedRoots: z.array(z.string().trim().min(1)).max(64).default([]),
+    managedAgentUseClaudeLogin: z.boolean().default(true),
+    browserEnabled: z.boolean().default(true),
+    browserUseClaudeLogin: z.boolean().default(true),
+    browserModel: z.string().trim().min(1).max(120).default("sonnet"),
+    browserEffort: z.enum(["low", "medium", "high"]).default("low"),
+    browserMaxTurns: z.number().int().min(1).max(50).default(12),
+    browserMaxBudgetUsd: z.number().positive().max(10).default(1),
+  }).strict().default({
+    host: "127.0.0.1", port: 4317, allowedRoots: [], managedAgentUseClaudeLogin: true,
+    browserEnabled: true, browserUseClaudeLogin: true, browserModel: "sonnet",
+    browserEffort: "low", browserMaxTurns: 12, browserMaxBudgetUsd: 1,
+  }),
+}).strict();
+export type RuntimeRecipe = z.infer<typeof RuntimeRecipeSchema>;
+
+export const RuntimePaneSchema = z.object({
+  windowName: z.string(),
+  paneId: z.string(),
+  pid: z.number().int().nonnegative(),
+  command: z.string(),
+  dead: z.boolean(),
+});
+export type RuntimePane = z.infer<typeof RuntimePaneSchema>;
+
+export const RuntimeStatusSchema = z.object({
+  recipe: RuntimeRecipeSchema,
+  tmuxAvailable: z.boolean(),
+  sessionExists: z.boolean(),
+  daemonManaged: z.boolean(),
+  dispatcherManaged: z.boolean(),
+  dispatcherConnected: z.boolean(),
+  dispatcherSessionId: z.string().nullable(),
+  panes: z.array(RuntimePaneSchema),
+  checkedAt: z.iso.datetime(),
+});
+export type RuntimeStatus = z.infer<typeof RuntimeStatusSchema>;
+
+export const runtimeSlashCommands = [
+  "agents", "compact", "config", "context", "doctor", "mcp", "memory", "permissions",
+  "reload-plugins", "rewind", "status", "tasks",
+] as const;
+const RuntimeSlashCommandSchema = z.string().trim().min(2).max(1_000)
+  .regex(/^\/[A-Za-z][A-Za-z0-9-]*(?:\s[^\r\n]*)?$/)
+  .refine((value) => runtimeSlashCommands.includes(value.slice(1).split(/\s/, 1)[0]!.toLowerCase() as typeof runtimeSlashCommands[number]), {
+    message: `Slash command must be one of: ${runtimeSlashCommands.map((value) => `/${value}`).join(", ")}`,
+  });
+
+export const RuntimeControlSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.enum(["repair", "relaunch_dispatcher", "open_terminal"]) }).strict(),
+  z.object({
+    action: z.literal("open_session_terminal"),
+    target: z.string().trim().min(1).max(240),
+  }).strict(),
+  z.object({
+    action: z.literal("slash_command"),
+    command: RuntimeSlashCommandSchema,
+  }).strict(),
+]);
+export type RuntimeControlInput = z.infer<typeof RuntimeControlSchema>;
+
+export const RuntimeTranscriptSchema = z.object({
+  reference: z.string().min(1),
+  source: z.enum(["tmux", "claude_logs"]),
+  available: z.boolean().default(true),
+  content: z.string(),
+  error: z.string().nullable().default(null),
+  capturedAt: z.iso.datetime(),
+});
+export type RuntimeTranscript = z.infer<typeof RuntimeTranscriptSchema>;
 export const ClaudeSessionControlSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("message"),
@@ -149,7 +240,7 @@ export const ClaudeSessionControlSchema = z.discriminatedUnion("action", [
     name: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/).optional(),
     model: z.string().trim().min(1).max(120).optional(),
     effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-    permissionMode: ClaudePermissionModeSchema.default("manual"),
+    permissionMode: ClaudePermissionModeSchema.default("auto"),
   }).strict(),
 ]);
 export type ClaudeSessionControlInput = z.input<typeof ClaudeSessionControlSchema>;

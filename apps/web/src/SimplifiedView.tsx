@@ -22,6 +22,9 @@ import type {
   BrowserJob,
   ClaudeAgentSession,
   ClaudePermissionMode,
+  RuntimeRecipe,
+  RuntimeStatus,
+  RuntimeTranscript,
   Memory,
   Run,
   Schedule,
@@ -34,7 +37,7 @@ import type {
   WorkspaceItemType,
   WorkspaceTrashedItem,
 } from "@cc-assistant/shared";
-import { isMainControllerName, MAIN_CONTROLLER_NAME } from "@cc-assistant/shared";
+import { isMainControllerName, runtimeSlashCommands } from "@cc-assistant/shared";
 import {
   archiveMemory,
   cancelRun,
@@ -43,6 +46,10 @@ import {
   createWorkspaceFolder,
   deleteWorkspaceFolder,
   dispatchInput,
+  controlRuntime,
+  getClaudeTranscript,
+  getRuntimeConfig,
+  getRuntimeStatus,
   invokeAbility,
   markNotificationRead,
   moveWorkspaceItem,
@@ -53,6 +60,7 @@ import {
   trashWorkspaceItem,
   updateTask,
   updateSchedule,
+  updateRuntimeConfig,
   updateWorkspaceFolder,
 } from "./api.js";
 
@@ -82,6 +90,15 @@ const ARCHIVE_FOLDER_ID = "system-archive";
 const TRASH_FOLDER_ID = "system-trash";
 type CanvasContextMenu = { nodeId: string; x: number; y: number };
 type DiagnosticMessage = { id: number; level: "info" | "error"; text: string; at: string };
+type TranscriptWindow = {
+  id: string;
+  session: ClaudeAgentSession;
+  transcript: RuntimeTranscript;
+  x: number;
+  y: number;
+  collapsed: boolean;
+  minimized: boolean;
+};
 export type CanvasArrangeDescriptor = {
   id: string;
   title: string;
@@ -258,7 +275,7 @@ function CompactPane({ type, title, description, status, expandOnHover, children
         type="button"
         aria-expanded={shownExpanded}
         title={shownExpanded ? `Collapse ${title}` : `Expand ${title}`}
-        onClick={() => setExpanded(!expanded)}
+        onClick={(event) => { if (!event.shiftKey) setExpanded(!expanded); }}
       >
         <span className="compact-status" aria-label={presentation.label}>{presentation.icon}</span>
         <span className="compact-type">{type}</span>
@@ -278,7 +295,7 @@ function PaneFlowNode({ data }: NodeProps<CanvasFlowNode>): React.JSX.Element {
 function FolderFlowNode({ data }: NodeProps<CanvasFlowNode>): React.JSX.Element {
   const folder = data.folder!;
   return <article className={`canvas-folder${data.dropActive ? " drag-over" : ""}`}>
-    <button type="button" className="canvas-folder-open nopan" onClick={data.onOpen}>
+    <button type="button" className="canvas-folder-open nopan" onClick={(event) => { if (!event.shiftKey) data.onOpen?.(); }}>
       <span className="folder-counter" aria-label={`${data.count ?? 0} items`}>{data.count ?? 0}</span>
       <span className="folder-glyph">{folderIconPresentation[folder.icon]}</span>
       <strong>{folder.name}</strong><small>{data.systemFolder ? (folder.id === TRASH_FOLDER_ID ? "Removed items" : "Completed history") : "Open folder"}</small>
@@ -354,9 +371,9 @@ export function SimplifiedView({
   const diagnosticSequence = useRef(0);
   const lastDiagnostic = useRef<string | undefined>(undefined);
   const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>(() => {
-    if (typeof window === "undefined") return "manual";
+    if (typeof window === "undefined") return "auto";
     const saved = window.localStorage.getItem("cc-assistant-permission-mode");
-    return saved === "auto" || saved === "bypassPermissions" ? saved : "manual";
+    return saved === "manual" || saved === "bypassPermissions" ? saved : "auto";
   });
   const [paneInputs, setPaneInputs] = useState<Record<string, string>>({});
   const flowInstance = useRef<ReactFlowInstance<CanvasFlowNode>>(null);
@@ -368,6 +385,29 @@ export function SimplifiedView({
     const saved = window.localStorage.getItem("cc-assistant-theme");
     return themes.some((candidate) => candidate.id === saved) ? saved as ThemeId : "forest";
   });
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>();
+  const [runtimeRecipe, setRuntimeRecipe] = useState<RuntimeRecipe>();
+  const [runtimeDaemon, setRuntimeDaemon] = useState<{ platform: string; host: string; port: number; allowedRoots: string[]; dataDir: string; browser?: unknown; managedAgent?: unknown }>();
+  const [slashCommand, setSlashCommand] = useState("/compact");
+  const [transcriptWindows, setTranscriptWindows] = useState<TranscriptWindow[]>([]);
+
+  const refreshRuntime = async (): Promise<void> => {
+    try {
+      const [configuration, status] = await Promise.all([getRuntimeConfig(), getRuntimeStatus()]);
+      setRuntimeRecipe(configuration.recipe);
+      setRuntimeDaemon(configuration.daemon);
+      setRuntimeStatus(status);
+      setPermissionMode(configuration.recipe.dispatcherPermissionMode);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not inspect the runtime");
+    }
+  };
+
+  useEffect(() => {
+    void refreshRuntime();
+    const timer = window.setInterval(() => void getRuntimeStatus().then(setRuntimeStatus).catch(() => undefined), 10_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -574,21 +614,97 @@ export function SimplifiedView({
   };
 
   const launchController = async (): Promise<void> => {
-    if (!defaultCwd) return setError("No allowed working directory is configured for the controller.");
     setBusy("controller-launch"); setError(undefined);
     try {
-      await controlClaudeSession({
-        action: "dispatch",
-        cwd: defaultCwd,
-        name: `${MAIN_CONTROLLER_NAME}-web-${Date.now().toString(36)}`,
-        permissionMode,
-        prompt: "Enter cc-assistant controller mode, load durable state read-only, summarize current focus, and wait for direction.",
-      });
-      setFeedback(`Controller launch proposed in ${permissionMode === "bypassPermissions" ? "bypass" : permissionMode} mode. Approve it once to start the session.`);
+      await controlRuntime({ action: mainController ? "relaunch_dispatcher" : "repair" });
+      setFeedback(`${mainController ? "Dispatcher relaunch" : "Runtime repair"} proposed. Approve it once to update the tmux runtime.`);
       onChange();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not propose the controller session");
     } finally { setBusy(undefined); }
+  };
+
+  const proposeRuntimeControl = async (
+    input: Parameters<typeof controlRuntime>[0],
+    success: string,
+  ): Promise<void> => {
+    setBusy(`runtime:${input.action}`); setError(undefined);
+    try {
+      await controlRuntime(input);
+      setFeedback(`${success} Approve the protected runtime action to continue.`);
+      onChange();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not control the runtime");
+    } finally { setBusy(undefined); }
+  };
+
+  const saveRuntimeRecipe = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    if (!runtimeRecipe) return;
+    setBusy("runtime:config"); setError(undefined);
+    try {
+      const saved = await updateRuntimeConfig({ ...runtimeRecipe, dispatcherPermissionMode: permissionMode });
+      setRuntimeRecipe(saved);
+      setFeedback("Runtime configuration saved. Repair or relaunch the dispatcher to apply process-level changes.");
+      await refreshRuntime();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save runtime configuration");
+    } finally { setBusy(undefined); }
+  };
+
+  const selectPermissionMode = async (mode: ClaudePermissionMode): Promise<void> => {
+    setPermissionMode(mode);
+    if (!runtimeRecipe) return;
+    try {
+      const saved = await updateRuntimeConfig({ ...runtimeRecipe, dispatcherPermissionMode: mode });
+      setRuntimeRecipe(saved);
+      setFeedback(`Default dispatcher permission mode set to ${mode}. Relaunch the dispatcher to apply it.`);
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save the permission mode"); }
+  };
+
+  const openTranscript = async (session: ClaudeAgentSession): Promise<void> => {
+    const reference = session.id ?? session.sessionId ?? session.name;
+    if (!reference) return setError("This Claude session has no transcript identifier.");
+    setBusy(`transcript:${sessionItemId(session)}`); setError(undefined);
+    try {
+      const transcript = await getClaudeTranscript(reference);
+      setTranscriptWindows((current) => {
+        const existing = current.find((candidate) => candidate.id === reference);
+        if (existing) return current.map((candidate) => candidate.id === reference
+          ? { ...candidate, transcript, minimized: false }
+          : candidate);
+        const offset = current.length * 28;
+        return [...current, { id: reference, session, transcript, x: 72 + offset, y: 120 + offset, collapsed: false, minimized: false }];
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not load the Claude transcript");
+    } finally { setBusy(undefined); }
+  };
+
+  const refreshTranscript = async (id: string): Promise<void> => {
+    const windowState = transcriptWindows.find((candidate) => candidate.id === id);
+    if (!windowState) return;
+    try {
+      const transcript = await getClaudeTranscript(id);
+      setTranscriptWindows((current) => current.map((candidate) => candidate.id === id ? { ...candidate, transcript } : candidate));
+    } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not refresh the transcript"); }
+  };
+
+  const beginTranscriptDrag = (event: React.PointerEvent<HTMLDivElement>, id: string): void => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    const current = transcriptWindows.find((candidate) => candidate.id === id);
+    if (!current) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const start = { clientX: event.clientX, clientY: event.clientY, x: current.x, y: current.y };
+    const move = (moveEvent: PointerEvent): void => setTranscriptWindows((windows) => windows.map((candidate) => candidate.id === id
+      ? { ...candidate, x: Math.max(0, start.x + moveEvent.clientX - start.clientX), y: Math.max(0, start.y + moveEvent.clientY - start.clientY) }
+      : candidate));
+    const stop = (): void => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
   };
 
   const invokePaneAbility = async (ability: AbilityManifest): Promise<void> => {
@@ -790,7 +906,7 @@ export function SimplifiedView({
       </CompactPane> })),
     ...visibleSessions.map((session) => ({ item: item("claude_session", sessionItemId(session), session.name ?? session.id ?? "Interactive session"), content:
       <CompactPane type="Claude" title={session.name ?? session.id ?? "Interactive session"} description={sentence(`A ${session.kind} Claude session is ${session.waitingFor ?? session.status ?? session.state ?? "saved"}`, "A Claude session")} status={sessionStatus(session)} expandOnHover={expandOnHover}>
-        <p>{session.cwd}</p><textarea aria-label={`Message ${session.name ?? session.id ?? "Claude session"}`} rows={3} value={paneInput(`claude:${sessionItemId(session)}`)} onChange={(event) => setPaneInput(`claude:${sessionItemId(session)}`, event.target.value)} placeholder="Message or continuation prompt…" /><div className="compact-actions wrap"><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "message")}>Send message</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "continue")}>Continue</button>{session.kind === "background" && session.id ? <><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "stop")}>Stop</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "respawn")}>Respawn</button></> : null}</div>{session.kind === "background" && session.id ? <div className="terminal-connect"><code>claude attach {session.id}</code><button onClick={() => void navigator.clipboard.writeText(`claude attach ${session.id}`).then(() => setFeedback("Attach command copied.")).catch(() => setError("Could not copy the attach command."))}>Copy terminal command</button></div> : <small>This interactive session can be messaged here; attach is available for background sessions.</small>}
+        <p>{session.cwd}</p><textarea aria-label={`Message ${session.name ?? session.id ?? "Claude session"}`} rows={3} value={paneInput(`claude:${sessionItemId(session)}`)} onChange={(event) => setPaneInput(`claude:${sessionItemId(session)}`, event.target.value)} placeholder="Message or continuation prompt…" /><div className="compact-actions wrap"><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "message")}>Send message</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "continue")}>Continue</button><button disabled={busy === `transcript:${sessionItemId(session)}`} onClick={() => void openTranscript(session)}>Transcript</button><button disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_session_terminal", target: session.id ?? session.sessionId ?? session.name ?? "" }, "Terminal launch proposed.")}>Open terminal</button>{session.kind === "background" && session.id ? <><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "stop")}>Stop</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "respawn")}>Respawn</button></> : null}</div>{session.kind === "background" && session.id ? <div className="terminal-connect"><code>claude attach {session.id}</code><button onClick={() => void navigator.clipboard.writeText(`claude attach ${session.id}`).then(() => setFeedback("Attach command copied.")).catch(() => setError("Could not copy the attach command."))}>Copy command</button></div> : <small>Interactive recipe sessions attach through their matching tmux pane.</small>}
       </CompactPane> })),
     ...activeRuns.map((run) => ({ item: item("run", run.id, run.title), content:
       <CompactPane type="Run" title={run.title} description={sentence(run.prompt ?? `${run.kind} work is ${run.status.replaceAll("_", " ")}`, "Managed work")} status={runStatus(run)} expandOnHover={expandOnHover}><p>{run.prompt ?? run.result ?? run.cwd}</p><button onClick={() => void cancelRun(run.id).then(onChange)}>Cancel</button></CompactPane> })),
@@ -882,7 +998,21 @@ export function SimplifiedView({
     folders.map((value) => `${value.id}:${value.revision}`).join(","), placements.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.folderId}`).join(","), layouts.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.x}:${value.y}`).join(","), trashedItems.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.trashedAt}`).join(","),
   ].join("|");
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<CanvasFlowNode>(desiredFlowNodes);
-  useEffect(() => { setFlowNodes(desiredFlowNodes); }, [flowRenderKey]);
+  const layoutSignature = layouts.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.x}:${value.y}`).join(",");
+  const previousCanvasScope = useRef(`${folderFilter ?? "base"}|${layoutSignature}`);
+  useEffect(() => {
+    const scope = `${folderFilter ?? "base"}|${layoutSignature}`;
+    const persistedLayoutChanged = previousCanvasScope.current !== scope;
+    previousCanvasScope.current = scope;
+    setFlowNodes((current) => {
+      const existing = new Map(current.map((node) => [node.id, node]));
+      return desiredFlowNodes.map((node) => {
+        const previous = existing.get(node.id);
+        if (!previous || persistedLayoutChanged) return node;
+        return { ...node, position: previous.position, ...(previous.selected !== undefined ? { selected: previous.selected } : {}) };
+      });
+    });
+  }, [flowRenderKey]);
   const defaultViewport = useMemo<Viewport>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem("cc-assistant-canvas-viewport") ?? "null") as Partial<Viewport> | null;
@@ -999,6 +1129,12 @@ export function SimplifiedView({
     }
     setContextMenu({ nodeId: node.id, x: event.clientX, y: event.clientY });
   };
+  const selectCanvasNode = (event: React.MouseEvent<Element>, node: CanvasFlowNode): void => {
+    if (!event.shiftKey) return;
+    const previouslySelected = new Set(flowNodes.filter((candidate) => candidate.selected).map((candidate) => candidate.id));
+    previouslySelected.add(node.id);
+    setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: previouslySelected.has(candidate.id) })));
+  };
   const contextNode = contextMenu ? flowNodes.find((candidate) => candidate.id === contextMenu.nodeId) : undefined;
   const contextNodes = contextNode?.selected ? flowNodes.filter((candidate) => candidate.selected) : contextNode ? [contextNode] : [];
   const contextItems = contextNodes.flatMap((candidate) => candidate.data.item ? [candidate.data.item] : []);
@@ -1036,13 +1172,47 @@ export function SimplifiedView({
             "bypassPermissions", "Bypass", "Run without Claude Code permission prompts",
           ]] as Array<[ClaudePermissionMode, string, string]>).map(([mode, label, title]) => <button
             key={mode} type="button" aria-pressed={permissionMode === mode} className={permissionMode === mode ? "selected" : ""}
-            title={title} onClick={() => setPermissionMode(mode)}>{label}</button>)}
+            title={title} onClick={() => void selectPermissionMode(mode)}>{label}</button>)}
         </div>
-        <span>Applies to newly launched controller sessions.</span>
+        <span>{runtimeStatus?.sessionExists ? `tmux: ${runtimeStatus.recipe.tmuxSession}` : "Runtime is not attached to tmux"} · applies after relaunch</span>
         <button type="button" disabled={busy === "controller-launch" || !defaultCwd} onClick={() => void launchController()}>
-          {busy === "controller-launch" ? "Proposing…" : mainController ? "Start replacement controller" : "Start controller"}
+          {busy === "controller-launch" ? "Proposing…" : mainController ? "Relaunch dispatcher" : "Repair & connect"}
         </button>
+        <button type="button" disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_terminal" }, "Dispatcher terminal launch proposed.")}>Open terminal</button>
       </div>
+      <div className="dispatcher-command-bar">
+        <label><span>Dispatcher command</span><input aria-label="Dispatcher slash command" list="dispatcher-slash-commands" value={slashCommand} onChange={(event) => setSlashCommand(event.target.value)} placeholder="/compact" /><datalist id="dispatcher-slash-commands">{runtimeSlashCommands.map((command) => <option key={command} value={`/${command}`} />)}</datalist></label>
+        <button type="button" disabled={!mainController || busy?.startsWith("runtime:") || !slashCommand.trim()} onClick={() => void proposeRuntimeControl({ action: "slash_command", command: slashCommand.trim() }, `${slashCommand.trim()} proposed for the dispatcher.`)}>Run command</button>
+        <button type="button" disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "repair" }, "Runtime repair proposed.")}>Repair</button>
+      </div>
+      <details className="runtime-config-panel">
+        <summary>Runtime recipe & app configuration</summary>
+        {runtimeRecipe ? <form onSubmit={(event) => void saveRuntimeRecipe(event)}>
+          <div className="runtime-config-grid">
+            <label><span>Recipe ID</span><input value={runtimeRecipe.id} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, id: event.target.value })} /></label>
+            <label><span>Recipe name</span><input value={runtimeRecipe.name} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, name: event.target.value })} /></label>
+            <label><span>tmux session</span><input value={runtimeRecipe.tmuxSession} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, tmuxSession: event.target.value })} /></label>
+            <label><span>Daemon window</span><input value={runtimeRecipe.daemonWindow} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemonWindow: event.target.value })} /></label>
+            <label><span>Dispatcher window</span><input value={runtimeRecipe.dispatcherWindow} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherWindow: event.target.value })} /></label>
+            <label><span>Dispatcher name</span><input value={runtimeRecipe.dispatcherName} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherName: event.target.value })} /></label>
+            <label><span>Teammate layout</span><select value={runtimeRecipe.dispatcherTeammateMode} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherTeammateMode: event.target.value as RuntimeRecipe["dispatcherTeammateMode"] })}><option value="tmux">tmux panes</option><option value="auto">Automatic</option><option value="in-process">In process</option></select></label>
+            <label><span>Model</span><input value={runtimeRecipe.dispatcherModel ?? ""} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherModel: event.target.value.trim() || null })} placeholder="Default" /></label>
+            <label><span>Effort</span><select value={runtimeRecipe.dispatcherEffort} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherEffort: event.target.value as RuntimeRecipe["dispatcherEffort"] })}>{["low", "medium", "high", "xhigh", "max"].map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label><span>Terminal launcher</span><select value={runtimeRecipe.terminalLauncher} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, terminalLauncher: event.target.value as RuntimeRecipe["terminalLauncher"] })}>{["auto", "xdg-terminal-exec", "gnome-terminal", "konsole", "xterm"].map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label><span>Daemon host</span><input value={runtimeRecipe.daemon.host} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, host: event.target.value } })} /></label>
+            <label><span>Daemon port</span><input type="number" min={1} max={65535} value={runtimeRecipe.daemon.port} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, port: Number(event.target.value) } })} /></label>
+            <label><span>Browser model</span><input value={runtimeRecipe.daemon.browserModel} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserModel: event.target.value } })} /></label>
+            <label><span>Browser effort</span><select value={runtimeRecipe.daemon.browserEffort} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserEffort: event.target.value as RuntimeRecipe["daemon"]["browserEffort"] } })}>{["low", "medium", "high"].map((value) => <option key={value}>{value}</option>)}</select></label>
+            <label><span>Browser max turns</span><input type="number" min={1} max={50} value={runtimeRecipe.daemon.browserMaxTurns} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserMaxTurns: Number(event.target.value) } })} /></label>
+            <label><span>Browser budget USD</span><input type="number" min={0.01} max={10} step={0.01} value={runtimeRecipe.daemon.browserMaxBudgetUsd} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserMaxBudgetUsd: Number(event.target.value) } })} /></label>
+          </div>
+          <label className="runtime-description"><span>Description</span><textarea rows={2} value={runtimeRecipe.description} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, description: event.target.value })} /></label>
+          <label className="runtime-description"><span>Allowed roots for next daemon launch (one per line; blank uses this checkout)</span><textarea rows={3} value={runtimeRecipe.daemon.allowedRoots.join("\n")} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, allowedRoots: event.target.value.split("\n").map((value) => value.trim()).filter(Boolean) } })} /></label>
+          <div className="runtime-flags"><label><input type="checkbox" checked={runtimeRecipe.dispatcherSandbox} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherSandbox: event.target.checked })} /> Strict Claude sandbox</label><label><input type="checkbox" checked={runtimeRecipe.dispatcherRemoteControl} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherRemoteControl: event.target.checked })} /> Claude Remote Control</label><label><input type="checkbox" checked={runtimeRecipe.autoRepair} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, autoRepair: event.target.checked })} /> Auto-repair policy</label><label><input type="checkbox" checked={runtimeRecipe.daemon.managedAgentUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, managedAgentUseClaudeLogin: event.target.checked } })} /> Managed agents use Claude login</label><label><input type="checkbox" checked={runtimeRecipe.daemon.browserEnabled} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserEnabled: event.target.checked } })} /> Browser worker enabled</label><label><input type="checkbox" checked={runtimeRecipe.daemon.browserUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserUseClaudeLogin: event.target.checked } })} /> Browser worker uses Claude login</label></div>
+          <div className="runtime-readonly"><strong>Current daemon (restart to change environment values)</strong><code>{runtimeDaemon ? `${runtimeDaemon.host}:${runtimeDaemon.port} · ${runtimeDaemon.platform} · ${runtimeDaemon.dataDir}` : "Loading…"}</code><small>Allowed roots: {runtimeDaemon?.allowedRoots.join(", ") ?? "unknown"}</small><details><summary>Browser and managed-agent settings</summary><pre>{JSON.stringify({ browser: runtimeDaemon?.browser, managedAgent: runtimeDaemon?.managedAgent }, null, 2)}</pre></details></div>
+          <button className="primary" disabled={busy === "runtime:config"}>Save recipe configuration</button>
+        </form> : <p>Loading runtime configuration…</p>}
+      </details>
       {permissionMode === "bypassPermissions" ? <p className="permission-warning dispatcher-permission-warning">Bypass removes Claude Code permission prompts. Use it only in an environment you trust and isolate.</p> : null}
       <form onSubmit={(event) => void submit(event)}>
         <textarea aria-label="Dispatcher field" autoFocus value={request}
@@ -1075,6 +1245,7 @@ export function SimplifiedView({
           onNodeDrag={nodeDrag}
           onNodeDragStop={nodeDragStop}
           onNodeContextMenu={openContextMenu}
+          onNodeClick={selectCanvasNode}
           onPaneClick={() => setContextMenu(undefined)}
           onInit={(instance) => { flowInstance.current = instance; }}
           onMoveEnd={(_event, viewport) => window.localStorage.setItem("cc-assistant-canvas-viewport", JSON.stringify(viewport))}
@@ -1084,11 +1255,12 @@ export function SimplifiedView({
           nodesConnectable={false}
           deleteKeyCode={null}
           zoomOnDoubleClick={false}
-          selectionOnDrag
+          selectionOnDrag={false}
           selectionMode={SelectionMode.Partial}
-          selectNodesOnDrag
-          panOnDrag={[1, 2]}
-          multiSelectionKeyCode={["Meta", "Control"]}
+          selectNodesOnDrag={false}
+          panOnDrag
+          selectionKeyCode="Shift"
+          multiSelectionKeyCode="Shift"
           fitViewOptions={{ padding: 0.18, minZoom: 0.35, maxZoom: 1.2, duration: 350 }}
         >
           <Background gap={22} size={1} color="var(--line)" />
@@ -1098,7 +1270,7 @@ export function SimplifiedView({
             <div className="canvas-location">
               <p className="eyebrow">Spatial workspace</p>
               <div><h2>{trashOpen ? "⌫ Trash" : archiveOpen ? "🗄 Archive" : selectedFolder ? `${folderIconPresentation[selectedFolder.icon]} ${selectedFolder.name}` : "Base workspace"}</h2><span>{canvasItemCount} visible · {selectedCount} selected</span></div>
-              <small>{trashOpen ? "Right-click an item to restore it." : archiveOpen ? "Completed items are collected here automatically." : selectedFolder ? "New prompts land in this folder." : "Drag one item onto another to create a folder. Drag the background to select several."}</small>
+              <small>{trashOpen ? "Right-click an item to restore it." : archiveOpen ? "Completed items are collected here automatically." : selectedFolder ? "New prompts land in this folder." : "Drag the background to pan. Shift-click icons to build a multi-selection."}</small>
             </div>
             {baseOpen ? <button type="button" className="archive-shortcut" onClick={() => setFolderFilter(ARCHIVE_FOLDER_ID)}>🗄 Open Archive <span>{archivedKeys.size}</span></button> : null}
             {archiveOpen || trashOpen ? <button type="button" className="folder-manage-toggle" onClick={() => setFolderFilter(null)}>← Back to base</button> : null}
@@ -1155,10 +1327,29 @@ export function SimplifiedView({
             {!contextNode.data.systemFolder ? <button type="button" role="menuitem" className="danger" onClick={() => { void removeFolderById(contextNode.data.folder!); setContextMenu(undefined); }}>Delete folder</button> : null}
           </> : null}
           {contextItems.length > 0 && trashOpen ? <button type="button" role="menuitem" onClick={() => { void restoreItems(contextItems); setContextMenu(undefined); }}>Restore to base workspace</button> : null}
+          {contextItems.length > 1 && !trashOpen ? <button type="button" role="menuitem" onClick={() => { void groupItems(contextItems.slice(1), contextItems[0]!); setContextMenu(undefined); }}>Create folder from selected items</button> : null}
           {contextItems.length > 0 && !trashOpen && (selectedFolder || contextItems.some((candidate) => placementByItem.has(placementKey(candidate.itemType, candidate.itemId)))) ? <button type="button" role="menuitem" onClick={() => { void moveItemsToFolder(contextItems, null); setContextMenu(undefined); }}>Remove from folder</button> : null}
           {contextItems.length > 0 && !trashOpen ? <button type="button" role="menuitem" className="danger" onClick={() => { void trashItems(contextItems); setContextMenu(undefined); }}>Move {contextItems.length > 1 ? "selected items" : "item"} to Trash</button> : null}
         </div> : null}
       </div>
     </section>
+    <div className="transcript-window-layer" aria-label="Claude transcript windows">
+      {transcriptWindows.filter((candidate) => !candidate.minimized).map((windowState) => <section
+        key={windowState.id}
+        className={`transcript-window${windowState.collapsed ? " collapsed" : ""}`}
+        style={{ left: windowState.x, top: windowState.y }}
+      >
+        <div className="transcript-window-titlebar" onPointerDown={(event) => beginTranscriptDrag(event, windowState.id)}>
+          <div><strong>{windowState.session.name ?? windowState.session.id ?? "Claude session"}</strong><small>{windowState.transcript.source} · {new Date(windowState.transcript.capturedAt).toLocaleTimeString()}</small></div>
+          <div><button title="Refresh transcript" onClick={() => void refreshTranscript(windowState.id)}>↻</button><button title={windowState.collapsed ? "Expand" : "Collapse"} onClick={() => setTranscriptWindows((current) => current.map((candidate) => candidate.id === windowState.id ? { ...candidate, collapsed: !candidate.collapsed } : candidate))}>{windowState.collapsed ? "▢" : "—"}</button><button title="Minimize" onClick={() => setTranscriptWindows((current) => current.map((candidate) => candidate.id === windowState.id ? { ...candidate, minimized: true } : candidate))}>▾</button><button title="Close" onClick={() => setTranscriptWindows((current) => current.filter((candidate) => candidate.id !== windowState.id))}>×</button></div>
+        </div>
+        {!windowState.collapsed ? <pre>{windowState.transcript.available
+          ? (windowState.transcript.content || "No transcript output yet.")
+          : `Transcript unavailable\n${windowState.transcript.error ?? "The session has no readable transcript source."}`}</pre> : null}
+      </section>)}
+    </div>
+    {transcriptWindows.some((candidate) => candidate.minimized) ? <div className="transcript-taskbar" aria-label="Minimized transcript windows">
+      <span>Sessions</span>{transcriptWindows.filter((candidate) => candidate.minimized).map((windowState) => <button key={windowState.id} onClick={() => setTranscriptWindows((current) => current.map((candidate) => candidate.id === windowState.id ? { ...candidate, minimized: false } : candidate))}>{windowState.session.name ?? windowState.session.id ?? "Claude"}</button>)}
+    </div> : null}
   </div>;
 }
