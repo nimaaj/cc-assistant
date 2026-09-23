@@ -138,6 +138,7 @@ export const RuntimeRecipeSchema = z.object({
   dispatcherWindow: z.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
   dispatcherName: z.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/),
   dispatcherPermissionMode: ClaudePermissionModeSchema.default("auto"),
+  dispatcherUseClaudeLogin: z.boolean().default(true),
   dispatcherSandbox: z.boolean().default(false),
   dispatcherTeammateMode: z.enum(["tmux", "in-process", "auto"]).default("tmux"),
   dispatcherModel: z.string().trim().min(1).max(120).nullable().default(null),
@@ -211,7 +212,7 @@ export type RuntimeControlInput = z.infer<typeof RuntimeControlSchema>;
 
 export const RuntimeTranscriptSchema = z.object({
   reference: z.string().min(1),
-  source: z.enum(["tmux", "claude_logs"]),
+  source: z.enum(["tmux", "claude_logs", "claude_transcript"]),
   available: z.boolean().default(true),
   content: z.string(),
   error: z.string().nullable().default(null),

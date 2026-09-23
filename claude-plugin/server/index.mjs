@@ -19832,6 +19832,7 @@ var RuntimeRecipeSchema = external_exports.object({
   dispatcherWindow: external_exports.string().trim().min(1).max(80).regex(/^[A-Za-z0-9_.-]+$/),
   dispatcherName: external_exports.string().trim().min(1).max(120).regex(/^[A-Za-z0-9_-]+$/),
   dispatcherPermissionMode: ClaudePermissionModeSchema.default("auto"),
+  dispatcherUseClaudeLogin: external_exports.boolean().default(true),
   dispatcherSandbox: external_exports.boolean().default(false),
   dispatcherTeammateMode: external_exports.enum(["tmux", "in-process", "auto"]).default("tmux"),
   dispatcherModel: external_exports.string().trim().min(1).max(120).nullable().default(null),
@@ -19911,7 +19912,7 @@ var RuntimeControlSchema = external_exports.discriminatedUnion("action", [
 ]);
 var RuntimeTranscriptSchema = external_exports.object({
   reference: external_exports.string().min(1),
-  source: external_exports.enum(["tmux", "claude_logs"]),
+  source: external_exports.enum(["tmux", "claude_logs", "claude_transcript"]),
   available: external_exports.boolean().default(true),
   content: external_exports.string(),
   error: external_exports.string().nullable().default(null),

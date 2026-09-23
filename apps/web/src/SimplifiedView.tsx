@@ -88,7 +88,7 @@ type CanvasFlowNode = Node<CanvasNodeData>;
 type CanvasEntry = { item: DraggableItem; content: ReactNode };
 const ARCHIVE_FOLDER_ID = "system-archive";
 const TRASH_FOLDER_ID = "system-trash";
-type CanvasContextMenu = { nodeId: string; x: number; y: number };
+type CanvasContextMenu = { nodeId: string; nodeIds: string[]; x: number; y: number };
 type DiagnosticMessage = { id: number; level: "info" | "error"; text: string; at: string };
 type TranscriptWindow = {
   id: string;
@@ -190,6 +190,25 @@ export function arrangeCanvasItems(
   return positions;
 }
 
+export function canvasNodeRefreshSignature(nodes: Array<{
+  id: string;
+  data: { count?: number; arrange: CanvasArrangeDescriptor };
+}>): string {
+  return nodes.map((node) => [
+    node.id, node.data.count ?? "", node.data.arrange.title, node.data.arrange.category,
+    node.data.arrange.status, node.data.arrange.time,
+  ].join(":")).join("|");
+}
+
+export function contextSelectionIds(clickedId: string, rememberedSelection: Iterable<string>): string[] {
+  const selected = [...rememberedSelection];
+  return selected.length > 1 && selected.includes(clickedId) ? selected : [clickedId];
+}
+
+export function visibleArchiveCount(archived: Iterable<string>, trashed: ReadonlySet<string>): number {
+  return [...archived].filter((key) => !trashed.has(key)).length;
+}
+
 export function automaticFolderName(firstTitle: string, secondTitle: string): string {
   const label = (value: string): string => clip(shortTitle(value), 32);
   const first = label(firstTitle);
@@ -205,6 +224,10 @@ export function shouldArchiveCanvasItem(itemType: WorkspaceItemType, status: str
   if (itemType === "claude_session") return status === "done" || status === "stopped";
   if (itemType === "browser_job") return status === "succeeded" || status === "cancelled";
   return false;
+}
+
+export function shouldArchiveClaudeSession(session: ClaudeAgentSession): boolean {
+  return !session.pid || shouldArchiveCanvasItem("claude_session", session.state);
 }
 
 export function sessionStatus(session: ClaudeAgentSession): CompactStatus {
@@ -296,7 +319,7 @@ function FolderFlowNode({ data }: NodeProps<CanvasFlowNode>): React.JSX.Element 
   const folder = data.folder!;
   return <article className={`canvas-folder${data.dropActive ? " drag-over" : ""}`}>
     <button type="button" className="canvas-folder-open nopan" onClick={(event) => { if (!event.shiftKey) data.onOpen?.(); }}>
-      <span className="folder-counter" aria-label={`${data.count ?? 0} items`}>{data.count ?? 0}</span>
+      <span className="folder-counter" aria-live="polite" aria-label={`${data.count ?? 0} items`}>{data.count ?? 0}</span>
       <span className="folder-glyph">{folderIconPresentation[folder.icon]}</span>
       <strong>{folder.name}</strong><small>{data.systemFolder ? (folder.id === TRASH_FOLDER_ID ? "Removed items" : "Completed history") : "Open folder"}</small>
     </button>
@@ -377,6 +400,8 @@ export function SimplifiedView({
   });
   const [paneInputs, setPaneInputs] = useState<Record<string, string>>({});
   const flowInstance = useRef<ReactFlowInstance<CanvasFlowNode>>(null);
+  const selectionSnapshot = useRef<Set<string>>(new Set());
+  const settingsRef = useRef<HTMLDetailsElement>(null);
   const trashDropRef = useRef<HTMLButtonElement>(null);
   const baseDropRef = useRef<HTMLDivElement>(null);
   const [expandOnHover, setExpandOnHover] = useState(() => typeof window !== "undefined" && window.localStorage.getItem("cc-assistant-expand-on-hover") === "true");
@@ -563,9 +588,10 @@ export function SimplifiedView({
     ...runs.filter((run) => shouldArchiveCanvasItem("run", run.status)).map((run) => placementKey("run", run.id)),
     ...approvals.filter((approval) => shouldArchiveCanvasItem("approval", approval.status)).map((approval) => placementKey("approval", approval.id)),
     ...notifications.filter((notification) => shouldArchiveCanvasItem("notification", notification.read)).map((notification) => placementKey("notification", notification.id)),
-    ...sessions.filter((session) => shouldArchiveCanvasItem("claude_session", session.state)).map((session) => placementKey("claude_session", sessionItemId(session))),
+    ...sessions.filter(shouldArchiveClaudeSession).map((session) => placementKey("claude_session", sessionItemId(session))),
     ...browserJobs.filter((job) => shouldArchiveCanvasItem("browser_job", job.status)).map((job) => placementKey("browser_job", job.id)),
   ]), [tasks, runs, approvals, notifications, sessions, browserJobs]);
+  const archiveCount = visibleArchiveCount(archivedKeys, trashedKeys);
 
   const visible = (itemType: WorkspaceItemType, itemId: string): boolean => {
     const key = placementKey(itemType, itemId);
@@ -969,7 +995,7 @@ export function SimplifiedView({
   const desiredFlowNodes: CanvasFlowNode[] = [
     ...(baseOpen ? [{
       id: `folder:${ARCHIVE_FOLDER_ID}`, type: "folder", position: defaultCanvasPosition(0, canvasColumns), draggable: false,
-      data: { kind: "folder" as const, folder: archiveFolder, systemFolder: true, count: archivedKeys.size, onOpen: () => { setFolderFilter(ARCHIVE_FOLDER_ID); setEditingFolder(false); }, arrange: { id: `folder:${ARCHIVE_FOLDER_ID}`, title: "Archive", category: "Folder", status: "complete" as const, time: 0 } },
+      data: { kind: "folder" as const, folder: archiveFolder, systemFolder: true, count: archiveCount, onOpen: () => { setFolderFilter(ARCHIVE_FOLDER_ID); setEditingFolder(false); }, arrange: { id: `folder:${ARCHIVE_FOLDER_ID}`, title: "Archive", category: "Folder", status: "complete" as const, time: 0 } },
     } satisfies CanvasFlowNode] : []),
     ...(baseOpen ? [{
       id: `folder:${TRASH_FOLDER_ID}`, type: "folder", position: defaultCanvasPosition(1, canvasColumns), draggable: false,
@@ -996,6 +1022,7 @@ export function SimplifiedView({
     runs.map((value) => `${value.id}:${value.revision}`).join(","), approvals.map((value) => `${value.id}:${value.status}`).join(","), notifications.map((value) => `${value.id}:${value.read}`).join(","),
     schedules.map((value) => `${value.id}:${value.revision}`).join(","), memories.map((value) => `${value.id}:${value.revision}`).join(","), abilities.map((value) => value.id).join(","), browserJobs.map((value) => `${value.id}:${value.status}`).join(","),
     folders.map((value) => `${value.id}:${value.revision}`).join(","), placements.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.folderId}`).join(","), layouts.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.x}:${value.y}`).join(","), trashedItems.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.trashedAt}`).join(","),
+    canvasNodeRefreshSignature(desiredFlowNodes),
   ].join("|");
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<CanvasFlowNode>(desiredFlowNodes);
   const layoutSignature = layouts.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.x}:${value.y}`).join(",");
@@ -1013,6 +1040,9 @@ export function SimplifiedView({
       });
     });
   }, [flowRenderKey]);
+  useEffect(() => {
+    selectionSnapshot.current = new Set(flowNodes.filter((node) => node.selected).map((node) => node.id));
+  }, [flowNodes]);
   const defaultViewport = useMemo<Viewport>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem("cc-assistant-canvas-viewport") ?? "null") as Partial<Viewport> | null;
@@ -1124,19 +1154,24 @@ export function SimplifiedView({
   const openContextMenu = (event: React.MouseEvent<Element>, node: CanvasFlowNode): void => {
     event.preventDefault();
     event.stopPropagation();
-    if (!node.selected) {
-      setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: candidate.id === node.id })));
-    }
-    setContextMenu({ nodeId: node.id, x: event.clientX, y: event.clientY });
+    const nodeIds = contextSelectionIds(node.id, selectionSnapshot.current);
+    selectionSnapshot.current = new Set(nodeIds);
+    setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: nodeIds.includes(candidate.id) })));
+    setContextMenu({ nodeId: node.id, nodeIds, x: event.clientX, y: event.clientY });
   };
   const selectCanvasNode = (event: React.MouseEvent<Element>, node: CanvasFlowNode): void => {
     if (!event.shiftKey) return;
-    const previouslySelected = new Set(flowNodes.filter((candidate) => candidate.selected).map((candidate) => candidate.id));
-    previouslySelected.add(node.id);
-    setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: previouslySelected.has(candidate.id) })));
+    event.stopPropagation();
+    const nextSelection = new Set(selectionSnapshot.current);
+    if (nextSelection.has(node.id)) nextSelection.delete(node.id);
+    else nextSelection.add(node.id);
+    selectionSnapshot.current = nextSelection;
+    setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: nextSelection.has(candidate.id) })));
   };
   const contextNode = contextMenu ? flowNodes.find((candidate) => candidate.id === contextMenu.nodeId) : undefined;
-  const contextNodes = contextNode?.selected ? flowNodes.filter((candidate) => candidate.selected) : contextNode ? [contextNode] : [];
+  const contextNodes = contextMenu
+    ? contextMenu.nodeIds.flatMap((id) => flowNodes.find((candidate) => candidate.id === id) ?? [])
+    : [];
   const contextItems = contextNodes.flatMap((candidate) => candidate.data.item ? [candidate.data.item] : []);
   const selectedCount = flowNodes.filter((candidate) => candidate.selected).length;
   const dispatcherActivities: Array<{ kind: DispatcherActivityKind; label: string; detail: string }> = [];
@@ -1179,14 +1214,18 @@ export function SimplifiedView({
           {busy === "controller-launch" ? "Proposing…" : mainController ? "Relaunch dispatcher" : "Repair & connect"}
         </button>
         <button type="button" disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_terminal" }, "Dispatcher terminal launch proposed.")}>Open terminal</button>
+        <button type="button" aria-controls="runtime-settings" onClick={() => {
+          if (settingsRef.current) settingsRef.current.open = true;
+          settingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}>⚙ Settings</button>
       </div>
       <div className="dispatcher-command-bar">
         <label><span>Dispatcher command</span><input aria-label="Dispatcher slash command" list="dispatcher-slash-commands" value={slashCommand} onChange={(event) => setSlashCommand(event.target.value)} placeholder="/compact" /><datalist id="dispatcher-slash-commands">{runtimeSlashCommands.map((command) => <option key={command} value={`/${command}`} />)}</datalist></label>
         <button type="button" disabled={!mainController || busy?.startsWith("runtime:") || !slashCommand.trim()} onClick={() => void proposeRuntimeControl({ action: "slash_command", command: slashCommand.trim() }, `${slashCommand.trim()} proposed for the dispatcher.`)}>Run command</button>
         <button type="button" disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "repair" }, "Runtime repair proposed.")}>Repair</button>
       </div>
-      <details className="runtime-config-panel">
-        <summary>Runtime recipe & app configuration</summary>
+      <details id="runtime-settings" ref={settingsRef} className="runtime-config-panel">
+        <summary><strong>Settings</strong><span>Runtime recipe, dispatcher, daemon, browser, and permission defaults</span></summary>
         {runtimeRecipe ? <form onSubmit={(event) => void saveRuntimeRecipe(event)}>
           <div className="runtime-config-grid">
             <label><span>Recipe ID</span><input value={runtimeRecipe.id} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, id: event.target.value })} /></label>
@@ -1208,7 +1247,7 @@ export function SimplifiedView({
           </div>
           <label className="runtime-description"><span>Description</span><textarea rows={2} value={runtimeRecipe.description} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, description: event.target.value })} /></label>
           <label className="runtime-description"><span>Allowed roots for next daemon launch (one per line; blank uses this checkout)</span><textarea rows={3} value={runtimeRecipe.daemon.allowedRoots.join("\n")} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, allowedRoots: event.target.value.split("\n").map((value) => value.trim()).filter(Boolean) } })} /></label>
-          <div className="runtime-flags"><label><input type="checkbox" checked={runtimeRecipe.dispatcherSandbox} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherSandbox: event.target.checked })} /> Strict Claude sandbox</label><label><input type="checkbox" checked={runtimeRecipe.dispatcherRemoteControl} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherRemoteControl: event.target.checked })} /> Claude Remote Control</label><label><input type="checkbox" checked={runtimeRecipe.autoRepair} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, autoRepair: event.target.checked })} /> Auto-repair policy</label><label><input type="checkbox" checked={runtimeRecipe.daemon.managedAgentUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, managedAgentUseClaudeLogin: event.target.checked } })} /> Managed agents use Claude login</label><label><input type="checkbox" checked={runtimeRecipe.daemon.browserEnabled} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserEnabled: event.target.checked } })} /> Browser worker enabled</label><label><input type="checkbox" checked={runtimeRecipe.daemon.browserUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserUseClaudeLogin: event.target.checked } })} /> Browser worker uses Claude login</label></div>
+          <div className="runtime-flags"><label><input type="checkbox" checked={runtimeRecipe.dispatcherUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherUseClaudeLogin: event.target.checked })} /> Dispatcher uses Claude login</label><label><input type="checkbox" checked={runtimeRecipe.dispatcherSandbox} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherSandbox: event.target.checked })} /> Strict Claude sandbox</label><label><input type="checkbox" checked={runtimeRecipe.dispatcherRemoteControl} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, dispatcherRemoteControl: event.target.checked })} /> Claude Remote Control</label><label><input type="checkbox" checked={runtimeRecipe.autoRepair} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, autoRepair: event.target.checked })} /> Auto-repair policy</label><label><input type="checkbox" checked={runtimeRecipe.daemon.managedAgentUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, managedAgentUseClaudeLogin: event.target.checked } })} /> Managed agents use Claude login</label><label><input type="checkbox" checked={runtimeRecipe.daemon.browserEnabled} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserEnabled: event.target.checked } })} /> Browser worker enabled</label><label><input type="checkbox" checked={runtimeRecipe.daemon.browserUseClaudeLogin} onChange={(event) => setRuntimeRecipe({ ...runtimeRecipe, daemon: { ...runtimeRecipe.daemon, browserUseClaudeLogin: event.target.checked } })} /> Browser worker uses Claude login</label></div>
           <div className="runtime-readonly"><strong>Current daemon (restart to change environment values)</strong><code>{runtimeDaemon ? `${runtimeDaemon.host}:${runtimeDaemon.port} · ${runtimeDaemon.platform} · ${runtimeDaemon.dataDir}` : "Loading…"}</code><small>Allowed roots: {runtimeDaemon?.allowedRoots.join(", ") ?? "unknown"}</small><details><summary>Browser and managed-agent settings</summary><pre>{JSON.stringify({ browser: runtimeDaemon?.browser, managedAgent: runtimeDaemon?.managedAgent }, null, 2)}</pre></details></div>
           <button className="primary" disabled={busy === "runtime:config"}>Save recipe configuration</button>
         </form> : <p>Loading runtime configuration…</p>}
@@ -1272,7 +1311,7 @@ export function SimplifiedView({
               <div><h2>{trashOpen ? "⌫ Trash" : archiveOpen ? "🗄 Archive" : selectedFolder ? `${folderIconPresentation[selectedFolder.icon]} ${selectedFolder.name}` : "Base workspace"}</h2><span>{canvasItemCount} visible · {selectedCount} selected</span></div>
               <small>{trashOpen ? "Right-click an item to restore it." : archiveOpen ? "Completed items are collected here automatically." : selectedFolder ? "New prompts land in this folder." : "Drag the background to pan. Shift-click icons to build a multi-selection."}</small>
             </div>
-            {baseOpen ? <button type="button" className="archive-shortcut" onClick={() => setFolderFilter(ARCHIVE_FOLDER_ID)}>🗄 Open Archive <span>{archivedKeys.size}</span></button> : null}
+            {baseOpen ? <button type="button" className="archive-shortcut" onClick={() => setFolderFilter(ARCHIVE_FOLDER_ID)}>🗄 Open Archive <span>{archiveCount}</span></button> : null}
             {archiveOpen || trashOpen ? <button type="button" className="folder-manage-toggle" onClick={() => setFolderFilter(null)}>← Back to base</button> : null}
             {selectedFolder ? <div ref={baseDropRef} className="canvas-base-drop" data-drop-active={dropTarget === "base"}>
               <button type="button" onClick={() => { setFolderFilter(null); setEditingFolder(false); }}>← Back to base</button><small>Drop here to remove an item from this folder</small>

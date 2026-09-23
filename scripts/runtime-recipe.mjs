@@ -37,6 +37,7 @@ export function validateRecipe(value) {
     dispatcherWindow: requireString(value.dispatcherWindow, "dispatcherWindow", token),
     dispatcherName: requireString(value.dispatcherName, "dispatcherName", /^[A-Za-z0-9_-]+$/),
     dispatcherPermissionMode: value.dispatcherPermissionMode,
+    dispatcherUseClaudeLogin: value.dispatcherUseClaudeLogin !== false,
     dispatcherSandbox: value.dispatcherSandbox === true,
     dispatcherTeammateMode: value.dispatcherTeammateMode,
     dispatcherModel: value.dispatcherModel === null ? null : requireString(value.dispatcherModel, "dispatcherModel"),
@@ -117,8 +118,12 @@ function shellQuote(value) {
   return `'${String(value).replaceAll("'", `'\\''`)}'`;
 }
 
-function controllerCommand(recipe) {
-  const args = [process.execPath, resolve(projectRoot, "scripts/start-controller.mjs"), "--permission-mode", recipe.dispatcherPermissionMode, "--controller-name", recipe.dispatcherName];
+export function controllerCommand(recipe) {
+  const args = [
+    ...(recipe.dispatcherUseClaudeLogin ? ["env", "-u", "ANTHROPIC_API_KEY"] : []),
+    process.execPath, resolve(projectRoot, "scripts/start-controller.mjs"),
+    "--permission-mode", recipe.dispatcherPermissionMode, "--controller-name", recipe.dispatcherName,
+  ];
   if (recipe.dispatcherSandbox) args.push("--sandbox");
   args.push("--", "--effort", recipe.dispatcherEffort, "--teammate-mode", recipe.dispatcherTeammateMode);
   if (recipe.dispatcherModel) args.push("--model", recipe.dispatcherModel);

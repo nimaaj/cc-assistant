@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { RuntimeControlSchema } from "@cc-assistant/shared";
 // @ts-expect-error The executable is intentionally plain ESM and is exercised directly here.
-import { loadRecipe, validateRecipe, validateSlashCommand } from "../../../scripts/runtime-recipe.mjs";
+import { controllerCommand, loadRecipe, validateRecipe, validateSlashCommand } from "../../../scripts/runtime-recipe.mjs";
 
 describe("runtime recipes", () => {
   it("loads the committed default tmux recipe", async () => {
     const recipe = await loadRecipe("default", { CC_ASSISTANT_DATA_DIR: "/tmp/cc-assistant-no-runtime-override" });
     expect(recipe.dispatcherPermissionMode).toBe("auto");
+    expect(recipe.dispatcherUseClaudeLogin).toBe(true);
     expect(recipe.dispatcherTeammateMode).toBe("tmux");
     expect(recipe.tmuxSession).toBe("cc-assistant");
+    expect(controllerCommand(recipe)).toContain("'env' '-u' 'ANTHROPIC_API_KEY'");
   });
 
   it("rejects unsafe tmux identifiers and arbitrary slash commands", () => {

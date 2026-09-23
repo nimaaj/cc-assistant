@@ -53,6 +53,7 @@ import { MemoryNotFoundError, MemoryRepository, MemoryRevisionConflictError } fr
 import { parseMemoryMarkdown, serializeMemoryMarkdown, type ImportedMemory } from "./memory-markdown.js";
 import { SessionRepository } from "./session-repository.js";
 import { RuntimeService } from "./runtime-service.js";
+import { readObservedClaudeTranscript } from "./claude-transcript.js";
 import {
   RevisionConflictError,
   TaskNotFoundError,
@@ -460,13 +461,31 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     const reference = z.object({ reference: z.string().min(1) }).parse(request.params).reference;
     const session = await claudeSessionControlService.get(reference);
     const source = session.kind === "background" && session.id ? "claude_logs" as const : "tmux" as const;
-    try {
-      if (source === "claude_logs") {
+    if (source === "claude_logs") {
+      try {
         return RuntimeTranscriptSchema.parse({
           reference, source, available: true, content: await claudeSessionControlService.logs(reference), error: null,
           capturedAt: new Date().toISOString(),
         });
+      } catch {
+        const observed = session.sessionId ? sessionRepository.get(session.sessionId) : undefined;
+        if (observed?.transcriptPath) {
+          try {
+            return RuntimeTranscriptSchema.parse({
+              reference, source: "claude_transcript", available: true,
+              content: await readObservedClaudeTranscript(observed), error: null,
+              capturedAt: new Date().toISOString(),
+            });
+          } catch { /* Fall through to a stable user-facing unavailable result. */ }
+        }
+        return RuntimeTranscriptSchema.parse({
+          reference, source, available: false, content: "",
+          error: "Claude no longer retains this background job, and no readable hook transcript was found.",
+          capturedAt: new Date().toISOString(),
+        });
       }
+    }
+    try {
       return runtimeService.capturePane(reference, session);
     } catch (error) {
       return RuntimeTranscriptSchema.parse({

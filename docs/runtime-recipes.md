@@ -61,7 +61,8 @@ The Simplified dispatcher header exposes:
   dispatcher relaunch; it does not change the permissions of a process already running.
 - **Repair**, **Relaunch dispatcher**, and **Open terminal**. Each creates an exact durable command
   approval before local execution.
-- a validated runtime recipe editor for tmux names, Claude name/model/effort, teammate display,
+- a visible **Settings** button and disclosure containing the validated runtime recipe editor for
+  tmux names, Claude name/model/effort, teammate display, dispatcher Claude-login preference,
   sandbox, Remote Control, restart policy, graphical terminal launcher, and next-launch daemon
   host, port, allowed roots, managed-agent login preference, and browser-worker limits;
 - read-only current daemon values beside the editable next-launch recipe. Process-level daemon
@@ -77,10 +78,18 @@ Cross-session messaging cannot execute a slash command. The allowlisted slash pa
 terminal-input exception; normal prompts continue through Claude Code's `ListAgents`/`SendMessage`
 boundary.
 
-Every Claude icon can open a browser transcript window. Background sessions use `claude logs`;
-interactive recipe sessions use a bounded read-only tmux pane capture. Transcript windows move,
-collapse, refresh, close, and minimize into the bottom session taskbar. No transcript file is
-edited or imported into assistant state.
+The prompt-delivery bridge resolves the unique live controller name at send time. It treats the
+session UUID reported by `claude agents --json` as inventory metadata because Claude's
+`ListAgents` peer reference uses a separate namespace. The bridge is intentionally one-shot; the
+persistent controller records its response in its own turn and durable assistant state rather
+than attempting to message the expired bridge peer.
+
+Every Claude icon can open a browser transcript window. Background sessions use `claude logs`
+while the job exists, then fall back to the bounded hook-recorded transcript under Claude's own
+projects directory. Interactive recipe sessions use a bounded read-only tmux pane capture.
+Transcript windows move, collapse, refresh, close, and minimize into the bottom session taskbar.
+No transcript file is edited or imported into assistant state, and raw tool results and hidden
+thinking are excluded from fallback rendering.
 
 ## Recovery
 
@@ -91,6 +100,10 @@ edited or imported into assistant state.
    evidence when the dashboard and Claude inventory disagree.
 5. A daemon already listening outside tmux is reused rather than killed. The recipe can still own
    the dispatcher; restart later with no competing daemon if you want both processes under tmux.
+
+The default recipe removes an inherited `ANTHROPIC_API_KEY` from the dispatcher process so it uses
+the signed-in Claude Code account without stopping at the custom-key confirmation prompt. Clear
+**Dispatcher uses Claude login** in Settings only when the dispatcher should inherit that key.
 
 Claude Code documents tmux split panes as an agent-team display mode, background session attachment
 through `claude attach`, logs through `claude logs`, and permission inheritance from the lead. The

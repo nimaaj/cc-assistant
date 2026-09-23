@@ -85,7 +85,8 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .dispatcher-command-bar input { min-height: 34px; padding: 6px 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .dispatcher-command-bar button { min-height: 34px; padding: 6px 10px; font-size: .64rem; }
 .runtime-config-panel { margin: 0 0 12px; padding: 8px 10px; background: color-mix(in srgb, var(--input) 78%, transparent); border: 1px solid var(--line); border-radius: 11px; }
-.runtime-config-panel > summary { cursor: pointer; color: var(--muted); font-size: .68rem; font-weight: 700; }
+.runtime-config-panel > summary { cursor: pointer; display: flex; align-items: baseline; gap: 9px; color: var(--text); font-size: .72rem; }
+.runtime-config-panel > summary span { color: var(--muted); font-size: .59rem; font-weight: 500; }
 .runtime-config-panel form { display: grid; gap: 10px; padding-top: 10px; }
 .runtime-config-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; }
 .runtime-config-grid label, .runtime-description { display: grid; gap: 3px; }
@@ -214,7 +215,7 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .folder-glyph { font-size: 1.7rem; filter: drop-shadow(0 4px 7px rgba(0,0,0,.24)); }
 .canvas-folder-open strong { width: 100%; overflow: hidden; color: var(--text); font-size: .72rem; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-folder-open small { color: var(--muted); font-size: .56rem; }
-.folder-counter { position: absolute; top: -9px; left: -9px; z-index: 3; min-width: 25px; height: 25px; display: grid; padding: 0 6px; place-items: center; color: #10160c; background: var(--accent); border: 3px solid var(--page); border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,.3); font: 800 .61rem ui-monospace, "SFMono-Regular", Consolas, monospace; }
+.folder-counter { position: absolute; top: -9px; right: -9px; z-index: 3; min-width: 25px; height: 25px; display: grid; padding: 0 6px; place-items: center; color: #10160c; background: var(--accent); border: 3px solid var(--page); border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,.3); font: 800 .61rem ui-monospace, "SFMono-Regular", Consolas, monospace; }
 .canvas-context-panel, .canvas-preferences-panel, .canvas-arrange-panel, .canvas-bottom-panel { z-index: 2000; margin: 12px; padding: 10px; background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.28); backdrop-filter: blur(12px); }
 .canvas-context-panel { width: min(300px, calc(100vw - 72px)); display: grid; gap: 8px; }
 .canvas-location { display: grid; gap: 3px; }

@@ -17,10 +17,10 @@ daemon environment variables; `auto` is the default, with explicit `manual` and
 
 ## Runtime recipe
 
-The committed baseline is `recipes/default.json`. The dashboard's **Runtime recipe & app
-configuration** editor writes a validated local override to `<data-dir>/runtime-config.json`.
-It covers tmux/session/window names, dispatcher name and permission mode, teammate display,
-model, effort, sandbox, Claude Remote Control, restart policy, graphical terminal launcher, and
+The committed baseline is `recipes/default.json`. The Simplified dashboard's **Settings** control
+opens a validated editor that writes a local override to `<data-dir>/runtime-config.json`.
+It covers tmux/session/window names, dispatcher name, permission mode and Claude-login preference,
+teammate display, model, effort, sandbox, Claude Remote Control, restart policy, terminal launcher, and
 the daemon values used on the next recipe launch: host, port, allowed roots, login preferences,
 and browser-worker limits. It cannot write tokens, browser cookies, arbitrary commands, or move
 the active data directory from inside that same directory.

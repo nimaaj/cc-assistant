@@ -148,10 +148,18 @@ the project stdio MCP server when it loads `.mcp.json`.
 
 The committed baseline is [`recipes/default.json`](recipes/default.json). A validated local
 override is stored at ignored path `.data/runtime-config.json`; it contains process configuration,
-not credentials. The Simplified UI edits this override and shows current daemon values read-only.
+not credentials. The Simplified UI exposes it through the explicit **Settings** control and shows
+current daemon values read-only. Folder badges are part of the node refresh signature, and
+multi-item context menus preserve a selection snapshot across React Flow's right-click handling.
 Dispatcher changes take effect through **Relaunch dispatcher**. Daemon environment changes take
 effect only after a full daemon restart. The active data directory and access token are
 deliberately excluded from browser-editable configuration.
+
+The default recipe removes an inherited `ANTHROPIC_API_KEY` from the dispatcher when **Dispatcher
+uses Claude login** is enabled, preventing the custom-key confirmation prompt from leaving tmux
+healthy while the controller remains unavailable. Background transcript preview first uses
+`claude logs` and falls back to a bounded, read-only hook transcript when Claude has already
+discarded the job record.
 
 The main dispatcher remains the fixed lead for the lifetime of the recipe. For coordinated work,
 the controller prompt tells it to prefer Claude agent teams, which inherit the lead permission
@@ -463,29 +471,32 @@ pnpm assistant:doctor
 CC_ASSISTANT_DATA_DIR=.data node scripts/mcp-smoke.mjs
 ```
 
-At the last completed feature handoff on 2026-09-22:
+At the last completed feature handoff on 2026-09-23:
 
-- daemon: 18 files and 63 tests passed;
+- daemon: 19 files and 65 tests passed;
 - CLI: 1 file and 3 tests passed;
-- web: 2 files and 13 tests passed;
+- web: 2 files and 18 tests passed;
 - shared/client/MCP workspaces reported no test files and exited successfully as configured;
 - all workspace TypeScript checks passed;
 - the production Vite build passed;
 - the plugin bundle built and strict validation passed;
 - `git diff --check` passed;
 - the recipe list and controller dry-run produced the expected fixed name, `auto` permission,
-  and `tmux` teammate mode without duplicate CLI arguments; and
-- the live local dashboard exposed the runtime editor and controls with no console warnings;
-  Automatic was selected, Shift-click multi-selection and selection-aware context menus were
-  exercised, transcript collapse/minimize/restore worked, and auto-arranged non-system items kept
-  their positions across reload.
+  and `tmux` teammate mode without duplicate CLI arguments;
+- the default recipe was live and healthy with daemon and dispatcher tmux windows;
+- the read-only MCP smoke exposed the full tool catalog and returned task state;
+- the guarded live browser smoke completed Google Calendar visible-event and Slack unread reads;
+- the production dashboard on port 4317 exercised Settings save, permission-mode persistence,
+  every auto-arrange mode, themes, hover expansion, full/simplified navigation, Shift-click
+  multi-selection, the multi-item context menu, archive counters, diagnostics, and transcript
+  open/minimize/restore/close;
+- a harmless Ctrl+Enter dispatcher request completed its approval-backed delivery to the live
+  controller after correcting the `ListAgents` peer-ref/session-UUID mismatch and bridge turn cap;
+  the controller guide now also forbids replying to the intentionally one-shot bridge peer.
 
-The default recipe itself was not started during this final pass because doing so would create a
-new live, potentially billable Claude session. This is the most important remaining runtime smoke:
-run `pnpm start`, inspect `pnpm recipe:status`, attach to tmux, submit a harmless dispatcher request,
-approve its delivery, create one team teammate, exercise `/compact`, open a transcript, then stop
-the tmux session when finished. Do not perform external Calendar or Slack writes as part of that
-smoke without a separate exact user approval.
+Live Calendar/Slack writes, permission bypass, arbitrary local commands, and `/compact` were not
+executed because they have external or disruptive effects. Exercise them only with separate exact
+user approval and controlled targets.
 
 The repository has dedicated workspace runners for both pnpm and npm and commits both lockfiles.
 Do not alternate managers against one `node_modules` tree. Dependency changes must refresh and
@@ -503,8 +514,8 @@ automatically.
 - This project must not request a separate cc-assistant Chrome extension.
 - macOS-specific service, clipboard, and Accessibility checks remain outstanding.
 - `.data` contains live local state and is ignored. Do not inspect or expose the access token.
-- The browser-visible development server was running at `127.0.0.1:4318` during the final UI
-  smoke. This is ephemeral machine state, not a service-management guarantee.
+- The production recipe dashboard was running at `127.0.0.1:4317` during the final UI smoke.
+  Development still uses the ephemeral Vite server at `127.0.0.1:4318` when `pnpm dev` is chosen.
 - A saved local `.data/runtime-config.json` may exist because the UI permission/configuration path
   was exercised. It is ignored and should be treated as machine-local state.
 - GitHub reports moderate Dependabot alerts on the default branch. Check the current count in the

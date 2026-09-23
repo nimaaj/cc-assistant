@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { ClaudeAgentSession } from "@cc-assistant/shared";
-import { arrangeCanvasItems, automaticFolderName, defaultCanvasPosition, placementKey, sessionStatus, shouldArchiveCanvasItem } from "./SimplifiedView.js";
+import {
+  arrangeCanvasItems,
+  automaticFolderName,
+  canvasNodeRefreshSignature,
+  contextSelectionIds,
+  defaultCanvasPosition,
+  placementKey,
+  sessionStatus,
+  shouldArchiveCanvasItem,
+  shouldArchiveClaudeSession,
+  visibleArchiveCount,
+} from "./SimplifiedView.js";
 
 function session(overrides: Partial<ClaudeAgentSession> = {}): ClaudeAgentSession {
   return {
@@ -70,6 +81,22 @@ describe("canvas auto arrangement", () => {
     expect(byTime["new-run"]).toEqual({ x: 340, y: 112 });
     expect(byTime.approval!.x).toBeGreaterThan(byTime["new-run"]!.x);
   });
+
+  it("changes its render signature when a folder badge count changes", () => {
+    const node = { id: "folder:test", data: { count: 1, arrange: items[0]! } };
+    expect(canvasNodeRefreshSignature([node]))
+      .not.toBe(canvasNodeRefreshSignature([{ ...node, data: { ...node.data, count: 2 } }]));
+  });
+});
+
+describe("canvas context selection", () => {
+  it("preserves a remembered multi-selection when a selected icon is right-clicked", () => {
+    expect(contextSelectionIds("second", new Set(["first", "second"]))).toEqual(["first", "second"]);
+  });
+
+  it("targets only an unselected icon when it is right-clicked", () => {
+    expect(contextSelectionIds("third", new Set(["first", "second"]))).toEqual(["third"]);
+  });
 });
 
 describe("automatic canvas archive", () => {
@@ -79,5 +106,14 @@ describe("automatic canvas archive", () => {
     expect(shouldArchiveCanvasItem("claude_session", "stopped")).toBe(true);
     expect(shouldArchiveCanvasItem("browser_job", "failed")).toBe(false);
     expect(shouldArchiveCanvasItem("memory", "active")).toBe(false);
+  });
+
+  it("moves sessions without a live process out of the base workspace", () => {
+    expect(shouldArchiveClaudeSession(session({ pid: null, state: "blocked" }))).toBe(true);
+    expect(shouldArchiveClaudeSession(session({ pid: 42, state: "blocked" }))).toBe(false);
+  });
+
+  it("does not count trashed completed items in the visible Archive badge", () => {
+    expect(visibleArchiveCount(new Set(["task:done", "run:done"]), new Set(["run:done"]))).toBe(1);
   });
 });

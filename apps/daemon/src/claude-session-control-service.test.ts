@@ -62,9 +62,13 @@ describe("Claude session control service", () => {
       payload: { action: "message", message: "Migration finished." },
     });
     expect(proposed.run.metadata.args).toEqual(expect.arrayContaining(["ListAgents", "SendMessage"]));
+    expect(proposed.run.metadata.args).toEqual(expect.arrayContaining(["--max-turns", "5"]));
     expect(proposed.run.metadata.resultProtocol).toBe("claude_delivery_v1");
-    expect(String((proposed.run.metadata.args as string[])[1])).toContain('Payload JSON: "Migration finished."');
-    expect(String((proposed.run.metadata.args as string[])[1])).toContain("<cc_assistant_delivery_result>");
+    const prompt = String((proposed.run.metadata.args as string[])[1]);
+    expect(prompt).toContain('Payload JSON: "Migration finished."');
+    expect(prompt).toContain("<cc_assistant_delivery_result>");
+    expect(prompt).toContain("ListAgents peer refs and inventory session IDs use different namespaces");
+    expect(prompt).not.toContain("Expected target session ID JSON");
     repository.close();
   });
 

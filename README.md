@@ -35,7 +35,7 @@ For a coding agent taking over the project, start with [`HANDOFF.md`](HANDOFF.md
 - Claude Code MCP tools for every capability above.
 - Claude Code lifecycle hooks and live session-state tracking.
 - A developer CLI for state inspection, mutation, export, and raw API calls.
-- A two-view responsive dashboard: a single-field dispatcher with an animated, zoomable spatial canvas, durable free-position panes, desktop multi-selection, automatic drag-to-group folders, reversible all-item trash, contextual menus, diagnostics, six color themes, plus the full workspace for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
+- A two-view responsive dashboard: a single-field dispatcher with an animated, zoomable spatial canvas, live folder badges, durable free-position panes, desktop multi-selection and selection-aware context menus, automatic drag-to-group folders, reversible all-item trash, visible runtime Settings, diagnostics, six color themes, plus the full workspace for tasks, sessions, runs, approvals, reminders, notifications, memory, Calendar/Slack jobs, trigger rules, safe command proposals, abilities, clipboard images, and a validated raw state studio.
 - Versioned runtime recipes with a default persistent tmux topology, an auto-restarting main dispatcher, Claude team panes, repair/relaunch/terminal controls, safe slash commands, and movable/minimizable transcript previews.
 
 ## Requirements

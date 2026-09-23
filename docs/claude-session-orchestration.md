@@ -98,10 +98,18 @@ Mutation commands return the proposed run and approval. Resolve it in the dashbo
 ## Tmux and transcript boundary
 
 The runtime status API inspects only the configured tmux session. Transcript preview uses
-`claude logs` for background sessions or bounded `tmux capture-pane` output for a safely matched
-interactive pane. Terminal launch, repair, relaunch, and slash commands first create durable
-command approvals. Slash commands are restricted to a one-line built-in allowlist and target only
-the recipe-owned dispatcher pane. Arbitrary prompt delivery never uses terminal input.
+`claude logs` for retained background jobs, a bounded read-only hook transcript fallback for jobs
+Claude no longer retains, or bounded `tmux capture-pane` output for a safely matched interactive
+pane. The fallback accepts only a matching session-ID JSONL file under Claude's project transcript
+directory and renders user/assistant text plus tool names, not hidden thinking or raw tool-result
+payloads. Terminal launch, repair, relaunch, and slash commands first create durable command
+approvals. Slash commands are restricted to a one-line built-in allowlist and target only the
+recipe-owned dispatcher pane. Arbitrary prompt delivery never uses terminal input.
+
+The delivery bridge identifies an interactive peer by its unique live name and, when the peer
+roster exposes it, its working directory. Claude's `agents --json` session UUID and `ListAgents`
+peer reference are different identifier namespaces and must not be compared. The bridge has five
+turns for the bounded `ListAgents` → `SendMessage` → structured-result exchange.
 
 ## Explicit non-goals
 

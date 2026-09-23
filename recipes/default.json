@@ -8,6 +8,7 @@
   "dispatcherWindow": "dispatcher",
   "dispatcherName": "cc-assistant-controller",
   "dispatcherPermissionMode": "auto",
+  "dispatcherUseClaudeLogin": true,
   "dispatcherSandbox": false,
   "dispatcherTeammateMode": "tmux",
   "dispatcherModel": null,
