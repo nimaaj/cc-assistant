@@ -25,6 +25,7 @@ import {
   WorkspaceItemLayoutSchema,
   WorkspaceTrashedItemListSchema,
   WorkspaceTrashedItemSchema,
+  WorkspaceProvenanceGraphSchema,
   type CreateTaskInput,
   type ClaudeSession,
   type ClaudeAgentSession,
@@ -57,6 +58,8 @@ import {
   type WorkspaceItemPlacement,
   type WorkspaceItemLayout,
   type WorkspaceTrashedItem,
+  type WorkspaceProvenanceGraph,
+  type UpsertWorkspaceProvenanceInput,
 } from "@cc-assistant/shared";
 
 export class AuthenticationError extends Error {}
@@ -242,6 +245,14 @@ export async function restoreWorkspaceItem(input: TrashWorkspaceItemInput): Prom
   await request("/api/workspace/trash/restore", {
     method: "POST", body: JSON.stringify(input),
   });
+}
+
+export async function listWorkspaceProvenance(): Promise<WorkspaceProvenanceGraph> {
+  return WorkspaceProvenanceGraphSchema.parse(await request("/api/workspace/provenance"));
+}
+
+export async function upsertWorkspaceProvenance(input: UpsertWorkspaceProvenanceInput): Promise<void> {
+  await request("/api/workspace/provenance", { method: "PUT", body: JSON.stringify(input) });
 }
 
 export async function listSchedules(): Promise<Schedule[]> {

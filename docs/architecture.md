@@ -46,7 +46,7 @@ Calendar observations feed the assistant's own durable reminder scheduler. The b
 
 ## Persisted entities
 
-The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, `workspace_folders`, `workspace_item_placements`, `workspace_item_layouts`, and append-only `events`.
+The database contains `tasks`, `sessions`, `runs`, `run_logs`, `approvals`, `schedules`, `notifications`, `memories`, `memory_revisions`, normalized `memory_links`, an FTS5 memory index, `abilities`, `browser_jobs`, `workspace_folders`, `workspace_item_placements`, `workspace_item_layouts`, `workspace_item_provenance`, `workspace_item_links`, and append-only `events`.
 
 All mutable entities use revisions or internal queue claims where concurrent actors may update them.
 
@@ -57,8 +57,10 @@ Commands, Claude session controls, and browser writes start in `waiting_approval
 Schedules store their next fire time in SQLite. One-time triggers disable after firing; interval triggers compute the next timestamp; notification triggers require at least one filter, stay enabled, and enforce a cooldown. Complete trigger/action payloads are validated on create and edit, and edits use optimistic revisions. Reminder delivery always enters the web inbox even if native desktop delivery fails.
 
 The simplified dashboard posts dispatcher text to the daemon. The daemon selects the newest live
-named main controller from Claude Code's supported session inventory, creates a normal
-cross-session approval, and only delivers the versioned request envelope after approval. Scheduled
+named main controller from Claude Code's supported session inventory and creates a normal
+cross-session approval. Manual mode leaves that approval pending; Automatic and Bypass immediately
+resolve only this internal, tool-limited delivery approval and retain the resolved ledger entry.
+All downstream protected operations keep their own approval boundary. Scheduled
 and system-notification dispatches use the same path. The controller—not the web client—performs
 context gathering, direct tool selection, decomposition, delegation, and final result synthesis.
 
@@ -75,6 +77,11 @@ Dragging an ordinary item or multi-selection to Trash writes `workspace_trashed_
 removes folder placement; it never hard-deletes or mutates the domain records. Restoring removes the
 marker and returns the item to the base canvas. The UI-only preferences use `localStorage` because they have no
 assistant-state meaning.
+
+The provenance graph is durable cross-domain state. It records the exact originating prompt,
+creating entity, immediate parent, and typed directed relationships. The canvas renders currently
+visible links as curved arrows and uses directed descendants for branch-scoped context actions.
+See [Workspace provenance graph](provenance-graph.md).
 
 ## Memory data ownership
 

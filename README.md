@@ -70,8 +70,10 @@ In development, the daemon listens on `127.0.0.1:4317` and Vite serves the hot-r
 On first launch, the daemon generates `.data/access-token`. Paste its contents into the dashboard login screen. The browser receives an HTTP-only, same-site cookie; the token is not stored in browser JavaScript storage.
 
 The dashboard opens on **Simplified**. Its dispatcher routes a natural-language outcome to the
-newest live controller whose generated name starts with `cc-assistant-controller-`; delivery first
-appears as an exact one-time approval. Unique names keep Claude's supported cross-session delivery
+newest live controller whose generated name starts with `cc-assistant-controller-`. Manual mode
+shows the exact delivery approval; Automatic and Bypass immediately resolve only that internal
+delivery approval while preserving its audit record. Commands, browser writes, destructive
+controls, and later protected tool use remain separately approval-gated. Unique names keep Claude's supported cross-session delivery
 unambiguous when older controllers are still present. The controller can gather missing context,
 call a direct tool, or delegate structured multi-step work.
 The spatial canvas fills the available workspace and keeps its folder, trash, diagnostics, theme, hover, zoom,
@@ -87,6 +89,10 @@ tasks, triggers, browser jobs, abilities, runs, approvals, notifications, and me
 their relevant operations. Drag from anywhere on a collapsed card; drag the empty canvas to pan,
 and Shift-click for a discontinuous selection. Right-click items and folders for contextual
 move, restore, open, and delete actions. Protected work still enters the normal approval flow.
+Curved arrowed links show which session and prompt created each item and how runs, memories, tasks,
+and other records relate. Hover the trace badge for the exact prompt and creator. Right-clicking a
+graph root selects its visible descendant branch; branch-scoped folder and Trash actions then apply
+to all selected descendants. An existing explicit multi-selection takes precedence.
 Submit the dispatcher with its button or `Ctrl+Enter`/`⌘+Enter`. Dropping any ordinary item or
 selection onto **Trash** removes it from the working canvas without deleting its domain record;
 open Trash and right-click to restore it.

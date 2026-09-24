@@ -218,6 +218,7 @@ export class ExecutionRepository {
   }
 
   createRun(input: {
+    id?: string;
     taskId?: string | null;
     kind: RunKind;
     status?: RunStatus;
@@ -228,7 +229,7 @@ export class ExecutionRepository {
   }): Run {
     const now = new Date().toISOString();
     const run = RunSchema.parse({
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       taskId: input.taskId ?? null,
       kind: input.kind,
       status: input.status ?? "queued",

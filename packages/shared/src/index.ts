@@ -502,6 +502,53 @@ export type WorkspaceItemType = z.infer<typeof WorkspaceItemTypeSchema>;
 export const WorkspaceCanvasEntityTypeSchema = z.enum([...workspaceItemTypes, "folder", "browser_worker"]);
 export type WorkspaceCanvasEntityType = z.infer<typeof WorkspaceCanvasEntityTypeSchema>;
 
+export const WorkspaceEntityRefSchema = z.object({
+  itemType: WorkspaceCanvasEntityTypeSchema,
+  itemId: z.string().trim().min(1).max(500),
+}).strict();
+export type WorkspaceEntityRef = z.infer<typeof WorkspaceEntityRefSchema>;
+
+export const workspaceLinkRelations = ["created", "derived", "requires", "related"] as const;
+export const WorkspaceLinkRelationSchema = z.enum(workspaceLinkRelations);
+export type WorkspaceLinkRelation = z.infer<typeof WorkspaceLinkRelationSchema>;
+
+export const WorkspaceItemProvenanceSchema = z.object({
+  itemType: WorkspaceItemTypeSchema,
+  itemId: z.string().min(1).max(500),
+  prompt: z.string().max(100_000).nullable(),
+  createdBy: WorkspaceEntityRefSchema.nullable(),
+  parent: WorkspaceEntityRefSchema.nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type WorkspaceItemProvenance = z.infer<typeof WorkspaceItemProvenanceSchema>;
+
+export const WorkspaceItemLinkSchema = z.object({
+  from: WorkspaceEntityRefSchema,
+  to: WorkspaceEntityRefSchema,
+  relation: WorkspaceLinkRelationSchema,
+  createdAt: z.iso.datetime(),
+});
+export type WorkspaceItemLink = z.infer<typeof WorkspaceItemLinkSchema>;
+
+export const UpsertWorkspaceProvenanceSchema = z.object({
+  item: z.object({
+    itemType: WorkspaceItemTypeSchema,
+    itemId: z.string().trim().min(1).max(500),
+  }).strict(),
+  prompt: z.string().max(100_000).nullable().optional(),
+  createdBy: WorkspaceEntityRefSchema.nullable().optional(),
+  parent: WorkspaceEntityRefSchema.nullable().optional(),
+  relatedTo: z.array(WorkspaceEntityRefSchema).max(100).default([]),
+}).strict();
+export type UpsertWorkspaceProvenanceInput = z.input<typeof UpsertWorkspaceProvenanceSchema>;
+
+export const WorkspaceProvenanceGraphSchema = z.object({
+  items: z.array(WorkspaceItemProvenanceSchema),
+  links: z.array(WorkspaceItemLinkSchema),
+});
+export type WorkspaceProvenanceGraph = z.infer<typeof WorkspaceProvenanceGraphSchema>;
+
 export const workspaceFolderIcons = [
   "folder",
   "briefcase",

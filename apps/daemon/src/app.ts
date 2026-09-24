@@ -31,6 +31,7 @@ import {
   UpdateScheduleSchema,
   UpdateTaskSchema,
   UpdateWorkspaceFolderSchema,
+  UpsertWorkspaceProvenanceSchema,
 } from "@cc-assistant/shared";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { z } from "zod";
@@ -398,7 +399,13 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
 
   app.post("/api/tasks", async (request, reply) => {
     const input = CreateTaskSchema.parse(request.body);
-    const task = repository.create(input, requestSource(request.headers["x-cc-assistant-source"]));
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    const task = repository.create(input, source);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "task", itemId: task.id },
+      prompt: input.description || input.title,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+    });
     return reply.code(201).send({ task });
   });
 
@@ -512,7 +519,25 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
       source: "web",
       context: body.context ?? {},
     });
-    const proposed = await claudeSessionControlService.proposeDispatcher(input);
+    const recipe = await runtimeService.recipe();
+    const proposed = await claudeSessionControlService.proposeDispatcher(input, {
+      autoApprove: recipe.dispatcherPermissionMode !== "manual",
+    });
+    const creator = {
+      itemType: "claude_session" as const,
+      itemId: proposed.target.sessionId ?? proposed.target.id ?? `${proposed.target.cwd}:${proposed.target.startedAt}`,
+    };
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "run", itemId: proposed.run.id },
+      prompt: input.input,
+      createdBy: creator,
+    });
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "approval", itemId: proposed.approval.id },
+      prompt: input.input,
+      createdBy: creator,
+      parent: { itemType: "run", itemId: proposed.run.id },
+    });
     return reply.code(202).send(proposed);
   });
 
@@ -543,12 +568,31 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   });
 
   app.post("/api/runs/agent", async (request, reply) => {
-    const run = executionService.startAgent(StartAgentRunSchema.parse(request.body));
+    const input = StartAgentRunSchema.parse(request.body);
+    const run = executionService.startAgent(input);
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "run", itemId: run.id }, prompt: input.prompt,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+      ...(input.taskId ? { parent: { itemType: "task" as const, itemId: input.taskId } } : {}),
+    });
     return reply.code(202).send({ run });
   });
 
   app.post("/api/runs/command", async (request, reply) => {
-    const proposed = executionService.proposeCommand(ProposeCommandSchema.parse(request.body));
+    const input = ProposeCommandSchema.parse(request.body);
+    const proposed = executionService.proposeCommand(input);
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    const creator = { itemType: "browser_worker" as const, itemId: `${source}-client` };
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "run", itemId: proposed.run.id }, prompt: `${input.executable} ${input.args.join(" ")}`.trim(),
+      createdBy: creator,
+      ...(input.taskId ? { parent: { itemType: "task" as const, itemId: input.taskId } } : {}),
+    });
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "approval", itemId: proposed.approval.id }, createdBy: creator,
+      parent: { itemType: "run", itemId: proposed.run.id },
+    });
     return reply.code(202).send(proposed);
   });
 
@@ -574,6 +618,11 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
       const action = z.string().min(1).parse(pending.payload.action);
       const input = z.record(z.string(), z.unknown()).parse(pending.payload.input);
       const job = assistantRepository.createBrowserJob(adapter, action, input, pending.runId);
+      assistantRepository.upsertWorkspaceProvenance({
+        item: { itemType: "browser_job", itemId: job.id },
+        parent: { itemType: "run", itemId: pending.runId },
+        createdBy: { itemType: "browser_worker", itemId: "calendar-slack" },
+      });
       executionService.updateExternalRun(pending.runId, {
         status: "running",
         metadata: { ...(executionRepository.getRun(pending.runId)?.metadata ?? {}), browserJobId: job.id },
@@ -594,6 +643,11 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
 
   app.post("/api/schedules", async (request, reply) => {
     const schedule = assistantRepository.createSchedule(CreateScheduleSchema.parse(request.body));
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "schedule", itemId: schedule.id }, prompt: schedule.name,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+    });
     return reply.code(201).send({ schedule });
   });
 
@@ -664,6 +718,17 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     assistantRepository.restoreWorkspaceItem(TrashWorkspaceItemSchema.parse(request.body));
     return reply.code(204).send();
   });
+
+  app.get("/api/workspace/provenance", async () => ({
+    items: assistantRepository.listWorkspaceItemProvenance(),
+    links: assistantRepository.listWorkspaceItemLinks(),
+  }));
+
+  app.put("/api/workspace/provenance", async (request) => ({
+    provenance: assistantRepository.upsertWorkspaceProvenance(
+      UpsertWorkspaceProvenanceSchema.parse(request.body),
+    ),
+  }));
 
   app.post("/api/triggers/system-notification", async (request) => {
     const input = z.object({ app: z.string().optional(), title: z.string().optional(), body: z.string().optional() }).parse(request.body);
@@ -758,12 +823,22 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
   });
 
   app.post("/api/memories", async (request, reply) => {
-    const memory = memoryRepository.create(CreateMemorySchema.parse(request.body), requestSource(request.headers["x-cc-assistant-source"]));
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    const memory = memoryRepository.create(CreateMemorySchema.parse(request.body), source);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "memory", itemId: memory.id }, prompt: null,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+    });
     return reply.code(201).send({ memory });
   });
 
   app.post("/api/memories/ingest", async (request, reply) => {
-    const memory = memoryRepository.ingest(IngestMemorySchema.parse(request.body), requestSource(request.headers["x-cc-assistant-source"]));
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    const memory = memoryRepository.ingest(IngestMemorySchema.parse(request.body), source);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "memory", itemId: memory.id }, prompt: null,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+    });
     return reply.code(201).send({ memory });
   });
 
@@ -792,6 +867,11 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
 
   app.post("/api/abilities", async (request, reply) => {
     const ability = assistantRepository.installAbility(AbilityManifestSchema.parse(request.body));
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "ability", itemId: ability.id }, prompt: ability.description,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+    });
     return reply.code(201).send({ ability });
   });
 
@@ -816,9 +896,24 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
     const body = BrowserJobRequestSchema.parse(request.body);
     const readActions = new Set(["list_visible_events", "list_events", "list_unreads", "read_channel"]);
     if (!readActions.has(body.action)) {
-      return reply.code(202).send(executionService.proposeBrowser(body.adapter, body.action, body.input));
+      const proposed = executionService.proposeBrowser(body.adapter, body.action, body.input);
+      const source = requestSource(request.headers["x-cc-assistant-source"]);
+      const creator = { itemType: "browser_worker" as const, itemId: `${source}-client` };
+      assistantRepository.upsertWorkspaceProvenance({
+        item: { itemType: "run", itemId: proposed.run.id }, prompt: body.action, createdBy: creator,
+      });
+      assistantRepository.upsertWorkspaceProvenance({
+        item: { itemType: "approval", itemId: proposed.approval.id }, createdBy: creator,
+        parent: { itemType: "run", itemId: proposed.run.id },
+      });
+      return reply.code(202).send(proposed);
     }
     const job = assistantRepository.createBrowserJob(body.adapter, body.action, body.input);
+    const source = requestSource(request.headers["x-cc-assistant-source"]);
+    assistantRepository.upsertWorkspaceProvenance({
+      item: { itemType: "browser_job", itemId: job.id }, prompt: body.action,
+      createdBy: { itemType: "browser_worker", itemId: `${source}-client` },
+    });
     browserAutomationService.submit(job.id);
     return reply.code(202).send({ job });
   });

@@ -11,11 +11,13 @@ import {
   listWorkspaceItemPlacements,
   listWorkspaceItemLayouts,
   listWorkspaceTrashedItems,
+  listWorkspaceProvenance,
   moveWorkspaceItem,
   resetWorkspaceItemLayouts,
   restoreWorkspaceItem,
   setWorkspaceItemLayout,
   trashWorkspaceItem,
+  upsertWorkspaceProvenance,
   proposeCommand,
   readClipboardImage,
   updateSchedule,
@@ -30,6 +32,33 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe("web API client", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("loads and writes durable workspace provenance", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [], links: [] }))
+      .mockResolvedValueOnce(jsonResponse({ item: {} }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(listWorkspaceProvenance()).resolves.toEqual({ items: [], links: [] });
+    await upsertWorkspaceProvenance({
+      item: { itemType: "memory", itemId: "memory-1" },
+      prompt: "Remember this environment",
+      createdBy: { itemType: "claude_session", itemId: "controller-1" },
+      parent: { itemType: "run", itemId: "run-1" },
+      relatedTo: [{ itemType: "task", itemId: "task-1" }],
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(2, "/api/workspace/provenance", expect.objectContaining({
+      method: "PUT",
+      body: JSON.stringify({
+        item: { itemType: "memory", itemId: "memory-1" },
+        prompt: "Remember this environment",
+        createdBy: { itemType: "claude_session", itemId: "controller-1" },
+        parent: { itemType: "run", itemId: "run-1" },
+        relatedTo: [{ itemType: "task", itemId: "task-1" }],
+      }),
+    }));
+  });
 
   it("preserves exact browser and command payloads", async () => {
     const fetch = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ accepted: true }, 202)));

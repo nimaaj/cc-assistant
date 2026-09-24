@@ -11,6 +11,7 @@ This directory is the source of truth for operating, extending, and handing over
 | Use npm instead of pnpm | [Package managers](package-managers.md) |
 | Configure paths, ports, limits, and browser workers | [Configuration](configuration.md) |
 | Understand the system boundaries and data ownership | [Architecture](architecture.md) |
+| Understand prompt, creator, and cross-item traceability | [Workspace provenance graph](provenance-graph.md) |
 | Use or migrate the standalone wiki knowledge base | [Memory and knowledge base](memory.md) |
 | Follow the memory capture/edit operating conventions | [Knowledge-base playbook](cc-assistant-knowledge-base-playbook.md) |
 | Explore the knowledge-base data flow | [Knowledge-base flowchart](diagrams/cc-knowledge-base-swimlane-flow.html) |

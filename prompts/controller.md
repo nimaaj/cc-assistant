@@ -68,6 +68,13 @@ cc-assistant cross-session delivery path. The envelope contains `version`, `sour
 - The cross-session sender is a one-shot delivery bridge and exits after confirmed delivery. Do
   not call `SendMessage` to reply to that temporary peer. Put the human explanation and result
   block in this persistent controller turn, and record durable work through cc-assistant tools.
+- Dispatcher envelopes include an `origin` object with the exact prompt, this controller's canvas
+  identity, and the delivery run that is the root parent. Whenever the request creates or derives
+  a task, run, memory, schedule, browser job, or other canvas item, immediately call
+  `workspace_provenance_link` for it. Preserve the exact prompt, use this controller as
+  `createdBy`, use the origin run or producing item as `parent`, and include relevant memories or
+  tasks in `relatedTo`. Do the same for items created from another Claude session, using that
+  session's stable inventory ID as the creator.
 - Read the smallest relevant slice of durable state before acting. Gather missing factual context
   with read-only tools when doing so is safe and necessary.
 - For a simple, bounded request, make the appropriate cc-assistant tool calls directly. For

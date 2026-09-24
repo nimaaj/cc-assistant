@@ -110,4 +110,42 @@ describe("assistant repository", () => {
       .toThrow("was not found");
     store.close();
   });
+
+  it("persists item provenance and directed graph links", () => {
+    const databasePath = join(tmpdir(), `cc-assistant-provenance-${randomUUID()}.sqlite`);
+    paths.push(databasePath);
+    let store = new AssistantRepository(databasePath);
+    const runId = randomUUID();
+    const memoryId = randomUUID();
+    const sessionId = randomUUID();
+    const provenance = store.upsertWorkspaceProvenance({
+      item: { itemType: "memory", itemId: memoryId },
+      prompt: "Remember this environment",
+      createdBy: { itemType: "claude_session", itemId: sessionId },
+      parent: { itemType: "run", itemId: runId },
+      relatedTo: [{ itemType: "task", itemId: randomUUID() }],
+    });
+    expect(provenance).toMatchObject({
+      prompt: "Remember this environment",
+      createdBy: { itemType: "claude_session", itemId: sessionId },
+      parent: { itemType: "run", itemId: runId },
+    });
+    expect(store.listWorkspaceItemLinks().map((link) => link.relation).sort())
+      .toEqual(["created", "derived", "related"]);
+    const refinedSessionId = randomUUID();
+    store.upsertWorkspaceProvenance({
+      item: { itemType: "memory", itemId: memoryId },
+      createdBy: { itemType: "claude_session", itemId: refinedSessionId },
+    });
+    expect(store.listWorkspaceItemLinks().filter((link) => link.relation === "created"))
+      .toEqual([expect.objectContaining({
+        from: { itemType: "claude_session", itemId: refinedSessionId },
+        to: { itemType: "memory", itemId: memoryId },
+      })]);
+    store.close();
+    store = new AssistantRepository(databasePath);
+    expect(store.listWorkspaceItemProvenance()).toMatchObject([{ itemId: memoryId }]);
+    expect(store.listWorkspaceItemLinks()).toHaveLength(3);
+    store.close();
+  });
 });

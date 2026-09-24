@@ -58,7 +58,10 @@ rename `runtime-config.json` if you intentionally want to return to the committe
 The Simplified dispatcher header exposes:
 
 - Manual, Automatic, and Bypass defaults. A selection is saved immediately and applies after a
-  dispatcher relaunch; it does not change the permissions of a process already running.
+  dispatcher relaunch; it does not change the permissions of a process already running. Manual
+  keeps the internal dispatcher-delivery approval pending. Automatic and Bypass resolve only that
+  tool-limited delivery approval immediately, while retaining its audit record. Neither setting
+  auto-approves commands, browser writes, destructive session controls, or later agent tool use.
 - **Repair**, **Relaunch dispatcher**, and **Open terminal**. Each creates an exact durable command
   approval before local execution.
 - a visible **Settings** button and disclosure containing the validated runtime recipe editor for

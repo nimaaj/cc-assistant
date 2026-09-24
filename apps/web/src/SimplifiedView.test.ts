@@ -6,6 +6,7 @@ import {
   canvasNodeRefreshSignature,
   contextSelectionIds,
   defaultCanvasPosition,
+  graphBranchNodeIds,
   placementKey,
   sessionStatus,
   shouldArchiveCanvasItem,
@@ -96,6 +97,21 @@ describe("canvas context selection", () => {
 
   it("targets only an unselected icon when it is right-clicked", () => {
     expect(contextSelectionIds("third", new Set(["first", "second"]))).toEqual(["third"]);
+  });
+
+  it("selects an entire directed provenance branch without looping on cycles", () => {
+    const createdAt = "2026-09-23T12:00:00.000Z";
+    const links = [
+      { from: { itemType: "claude_session" as const, itemId: "controller" }, to: { itemType: "run" as const, itemId: "run-1" }, relation: "created" as const, createdAt },
+      { from: { itemType: "run" as const, itemId: "run-1" }, to: { itemType: "memory" as const, itemId: "memory-1" }, relation: "derived" as const, createdAt },
+      { from: { itemType: "memory" as const, itemId: "memory-1" }, to: { itemType: "run" as const, itemId: "run-1" }, relation: "related" as const, createdAt },
+      { from: { itemType: "run" as const, itemId: "hidden" }, to: { itemType: "task" as const, itemId: "hidden-task" }, relation: "derived" as const, createdAt },
+    ];
+    expect(graphBranchNodeIds("item:claude_session:controller", links, new Set([
+      "item:claude_session:controller", "item:run:run-1", "item:memory:memory-1",
+    ]))).toEqual([
+      "item:claude_session:controller", "item:run:run-1", "item:memory:memory-1",
+    ]);
   });
 });
 

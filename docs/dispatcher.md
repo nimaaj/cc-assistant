@@ -20,8 +20,10 @@ boundaries.
    `cc-assistant-controller-`. Background launchers generate the suffix automatically. An explicit
    target may be supplied by non-UI callers.
 3. The daemon wraps the request in a versioned `CC_ASSISTANT_DISPATCH_V1` envelope and creates the
-   normal one-time cross-session approval. It does not send the message yet.
-4. After the user approves the exact payload, the existing tool-limited delivery bridge resolves
+   normal one-time cross-session approval. Manual mode leaves it pending. Automatic and Bypass
+   immediately resolve only this internal delivery approval and preserve the resolved audit entry;
+   they do not approve downstream commands, writes, destructive controls, or agent tool use.
+4. Once the delivery approval is resolved, the existing tool-limited bridge resolves
    the target through Claude Code and sends the message once. The bridge must return a structured
    delivery receipt; an ambiguous, refused, or otherwise unsent message fails the run even when
    the bridge process itself exits with code zero.
@@ -94,9 +96,11 @@ or blocked work stays on the base canvas because it still needs attention. Memor
 configured triggers remain visible because completion does not make them obsolete.
 
 The dispatcher header has Manual, Automatic, and Bypass permission buttons. The selection is saved
-to the active runtime recipe and applies after **Repair & connect** or **Relaunch dispatcher**.
-Starting still creates a one-time approval; changing the selector does not silently alter an
-already-running Claude process. Bypass mode displays an explicit isolation warning. The same area
+to the active runtime recipe and applies to new dispatcher deliveries immediately and to the
+Claude process after **Repair & connect** or **Relaunch dispatcher**. Every delivery still creates
+a durable approval record; Automatic and Bypass resolve only this narrow bridge record rather than
+leaving it pending. Changing the selector does not silently alter an already-running Claude process.
+Bypass mode displays an explicit isolation warning. The same area
 offers approved terminal launch, repair, and allowlisted slash commands plus the complete safe
 recipe editor. Next-launch daemon settings are editable; current effective values are shown
 read-only because they require a full daemon restart.
@@ -126,6 +130,12 @@ contents by returning them to the base workspace. A right-click menu exposes Ope
 and Remove from folder/Move to Trash/Restore for items as appropriate. When the clicked icon is
 already selected, the menu applies to the whole selection and can group selected items.
 
+Every created item can also have a durable prompt, creator, parent, and typed relationships. Curved
+arrowed edges show links whose two endpoints are visible in the current canvas scope, and the trace
+badge exposes the exact prompt and origin. Right-clicking a graph root selects all of its visible
+directed descendants and labels the menu as branch-scoped. An explicit multi-selection containing
+the clicked item takes precedence. See [Workspace provenance graph](provenance-graph.md).
+
 Trash accepts every ordinary canvas item. A drop writes a `workspace_trashed_items` marker and removes
 folder placement without deleting or mutating the underlying task, run, approval, notification,
 memory, schedule, ability, browser job, or Claude-session record. Open the counted Trash view and use
@@ -150,12 +160,12 @@ With `pnpm dev` running:
 6. use **Reset layout** and confirm panes return to the default grid;
 7. drag one item onto another, verify a counted folder is created, add another item, and verify
    folder membership survives a reload;
-8. open that folder, dispatch a harmless request, and verify the proposed run and approval appear
-   in the open folder;
+8. open that folder, dispatch a harmless request, and verify its run appears in the open folder;
+   in Manual mode its pending approval should appear there too;
 9. multi-select two items, drag them onto Trash, open Trash, and right-click to restore them;
 10. switch themes, reload, and verify the selected palette remains active;
 11. switch to **Full workspace** and verify the original controls remain present;
-12. submit a harmless dispatcher request, inspect its pending approval, and deny it or approve it
-   once to test delivery;
+12. in Manual mode, submit a harmless dispatcher request, inspect its pending approval, and deny it
+   or approve it once; in Automatic mode, verify delivery starts without a new pending approval;
 13. create a one-time dispatcher schedule and verify firing creates an approval rather than sending
    without consent.

@@ -28,12 +28,15 @@ interface ActiveExecution {
 }
 
 export interface SessionControlCommand {
+  runId?: string;
   action: string;
   title: string;
   summary: string;
   args: string[];
   cwd: string;
   payload: Record<string, unknown>;
+  prompt?: string;
+  autoApprove?: boolean;
   timeoutMs?: number;
   resultProtocol?: "claude_delivery_v1";
 }
@@ -197,9 +200,11 @@ export class ExecutionService {
     const cwd = this.#allowedDirectory(input.cwd);
     const timeoutMs = input.timeoutMs ?? 120_000;
     const run = this.#repository.createRun({
+      ...(input.runId ? { id: input.runId } : {}),
       kind: "command",
       status: "waiting_approval",
       title: input.title,
+      prompt: input.prompt ?? null,
       cwd,
       metadata: {
         executable: "claude",
@@ -210,7 +215,7 @@ export class ExecutionService {
         resultProtocol: input.resultProtocol ?? null,
       },
     });
-    const approval = this.#repository.createApproval({
+    let approval = this.#repository.createApproval({
       runId: run.id,
       actionType: "claude_session_control",
       summary: input.summary,
@@ -220,7 +225,13 @@ export class ExecutionService {
         command: { executable: "claude", args: input.args, cwd, timeoutMs },
       },
     });
-    return { run, approval };
+    if (input.autoApprove) {
+      approval = this.resolveApproval(approval.id, {
+        decision: "approved",
+        note: "Automatically approved by the dispatcher permission policy",
+      });
+    }
+    return { run: this.#repository.getRun(run.id) ?? run, approval };
   }
 
   proposeBrowser(adapter: "google_calendar" | "slack", action: string, input: Record<string, unknown>): { run: Run; approval: Approval } {

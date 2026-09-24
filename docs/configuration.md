@@ -128,4 +128,7 @@ viewport are intentionally UI-local and stored as `cc-assistant-theme`,
 none contains credentials or assistant records.
 The Simplified view mirrors the selected permission mode under
 `cc-assistant-permission-mode` for immediate presentation, while the authoritative next-launch
-value is saved in `runtime-config.json`. Neither changes an existing Claude process.
+value is saved in `runtime-config.json`. Neither changes an existing Claude process. For new web
+dispatcher requests, Manual leaves the delivery approval pending; Automatic and Bypass
+immediately resolve only the internal dispatcher-delivery approval. Other protected actions keep
+their separate approvals in every mode.

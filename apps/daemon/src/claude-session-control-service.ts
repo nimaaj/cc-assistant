@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   ClaudeAgentSessionSchema,
   ClaudeSessionControlSchema,
@@ -91,7 +92,10 @@ function deliveryPrompt(target: ClaudeAgentSession, message: string): string {
   ].join("\n");
 }
 
-function dispatcherEnvelope(input: ReturnType<typeof DispatcherRequestSchema.parse>): string {
+function dispatcherEnvelope(
+  input: ReturnType<typeof DispatcherRequestSchema.parse>,
+  origin: { runId: string; controller: ClaudeAgentSession },
+): string {
   return [
     "CC_ASSISTANT_DISPATCH_V1",
     "Interpret the JSON envelope below according to the dispatcher contract in the controller operating guide.",
@@ -101,6 +105,14 @@ function dispatcherEnvelope(input: ReturnType<typeof DispatcherRequestSchema.par
       source: input.source,
       request: input.input,
       context: input.context,
+      origin: {
+        prompt: input.input,
+        parent: { itemType: "run", itemId: origin.runId },
+        createdBy: {
+          itemType: "claude_session",
+          itemId: origin.controller.sessionId ?? origin.controller.id ?? `${origin.controller.cwd}:${origin.controller.startedAt}`,
+        },
+      },
       receivedAt: new Date().toISOString(),
     }),
   ].join("\n");
@@ -146,7 +158,10 @@ export class ClaudeSessionControlService {
     return (await this.#runner(["logs", session.id], { timeoutMs: 15_000 })).stdout;
   }
 
-  async proposeDispatcher(rawInput: DispatcherRequest): Promise<{ run: Run; approval: Approval; target: ClaudeAgentSession }> {
+  async proposeDispatcher(
+    rawInput: DispatcherRequest,
+    options: { autoApprove?: boolean } = {},
+  ): Promise<{ run: Run; approval: Approval; target: ClaudeAgentSession }> {
     const input = DispatcherRequestSchema.parse(rawInput);
     const sessions = await this.list(false);
     const candidates = sessions
@@ -166,9 +181,10 @@ export class ClaudeSessionControlService {
         ? `No live Claude Code session matches dispatcher target ${input.target}`
         : "No live cc-assistant-controller session is available; start the main controller first");
     }
-    const proposed = this.#proposeMessage(target, dispatcherEnvelope(input), {
+    const runId = randomUUID();
+    const proposed = this.#proposeMessage(target, dispatcherEnvelope(input, { runId, controller: target }), {
       dispatcher: { source: input.source, request: input.input, context: input.context },
-    }, sessions);
+    }, sessions, { runId, prompt: input.input, autoApprove: options.autoApprove === true });
     return { ...proposed, target };
   }
 
@@ -177,6 +193,7 @@ export class ClaudeSessionControlService {
     message: string,
     extraPayload: Record<string, unknown> = {},
     liveSessions: ClaudeAgentSession[] = [],
+    options: { runId?: string; prompt?: string; autoApprove?: boolean } = {},
   ): { run: Run; approval: Approval } {
     if (!target.name || !target.pid) {
       throw new ExecutionInputError("Cross-session messages require a named, live Claude Code session");
@@ -190,12 +207,15 @@ export class ClaudeSessionControlService {
     const prompt = deliveryPrompt(target, message);
     const controlCwd = this.#config.allowedRoots[0] ?? process.cwd();
     return this.#executionService.proposeSessionControl({
+      ...(options.runId ? { runId: options.runId } : {}),
       action: "message",
       title: `Message Claude session ${target.name}`,
       summary: `Send a cross-session message to ${target.name}`,
       args: ["-p", prompt, "--output-format", "json", "--max-turns", "5", "--allowedTools", "ListAgents", "SendMessage"],
       cwd: controlCwd,
       payload: { target, message, ...extraPayload },
+      ...(options.prompt ? { prompt: options.prompt } : {}),
+      autoApprove: options.autoApprove === true,
       resultProtocol: "claude_delivery_v1",
     });
   }

@@ -150,6 +150,12 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .workspace-canvas .react-flow__controls-button:hover { background: var(--panel-raised); }
 .workspace-canvas .react-flow__controls-button svg { fill: currentColor; }
 .workspace-canvas .react-flow__minimap { overflow: hidden; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 26px rgba(0,0,0,.25); }
+.workspace-canvas .react-flow__edge-path { stroke: color-mix(in srgb, var(--accent) 58%, #617068); stroke-width: 1.6; }
+.workspace-canvas .react-flow__edge.animated .react-flow__edge-path { stroke-dasharray: 6 5; }
+.workspace-canvas .react-flow__edge-text { fill: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
+.workspace-canvas .react-flow__edge-textbg { fill: color-mix(in srgb, var(--panel) 92%, transparent); }
+.workspace-canvas .react-flow__arrowhead polyline { stroke: var(--accent); }
+.workspace-canvas .provenance-edge.relation-related .react-flow__edge-path { stroke: #8d82bf; }
 
 .status-legend { display: flex; flex-wrap: wrap; gap: 7px 14px; margin: -8px 2px -2px; color: var(--muted); font-size: .62rem; }
 .status-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -169,6 +175,12 @@ header h1 { margin: 8px 0 0; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing
 .compact-group-heading p { margin: 4px 0 0; color: var(--muted); font-size: .65rem; }
 .compact-track { display: flex; align-items: flex-start; gap: 8px; min-height: 88px; padding: 2px 2px 8px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; }
 .compact-pane { position: relative; width: 136px; min-width: 0; overflow: hidden; background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 9px 24px rgba(0,0,0,.24); transition: width .22s ease, border-color .18s, background .18s, opacity .15s, transform .15s, box-shadow .15s; }
+.canvas-graph-node { position: relative; }
+.canvas-graph-node .react-flow__handle { width: 7px; height: 7px; background: var(--accent); border: 2px solid var(--panel); opacity: .8; }
+.provenance-badge { position: absolute; z-index: 3; right: 7px; bottom: -10px; display: flex; align-items: center; gap: 4px; max-width: 118px; padding: 3px 6px; color: var(--muted); background: color-mix(in srgb, var(--panel-raised) 96%, transparent); border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 4px 11px rgba(0,0,0,.24); cursor: help; }
+.provenance-badge span { color: var(--accent); font-size: .58rem; }
+.provenance-badge strong { overflow: hidden; font-size: .5rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.provenance-badge small { min-width: 14px; color: var(--accent); font: 750 .48rem ui-monospace, "SFMono-Regular", Consolas, monospace; text-align: right; }
 .compact-pane:hover { box-shadow: 0 13px 34px rgba(0,0,0,.32); }
 .compact-pane.expanded { width: 390px; overflow: visible; background: color-mix(in srgb, var(--panel-raised) 96%, transparent); border-color: color-mix(in srgb, var(--accent) 34%, var(--line)); }
 .compact-pane.status-attention { border-color: rgba(255,152,141,.42); }

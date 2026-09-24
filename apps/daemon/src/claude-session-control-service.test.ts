@@ -98,6 +98,15 @@ describe("Claude session control service", () => {
     const envelope = String((proposed.approval.payload as { message: unknown }).message);
     expect(envelope).toContain("CC_ASSISTANT_DISPATCH_V1");
     expect(envelope).toContain("Remember the Linux version and environment here.");
+    const envelopeJson = JSON.parse(envelope.split("\n").at(-1)!) as {
+      origin: { prompt: string; parent: { itemType: string; itemId: string }; createdBy: { itemType: string; itemId: string } };
+    };
+    expect(envelopeJson.origin).toEqual({
+      prompt: "Remember the Linux version and environment here.",
+      parent: { itemType: "run", itemId: proposed.run.id },
+      createdBy: { itemType: "claude_session", itemId: "new22222-0000-4000-8000-000000000000" },
+    });
+    expect(proposed.run.prompt).toBe("Remember the Linux version and environment here.");
     repository.close();
   });
 

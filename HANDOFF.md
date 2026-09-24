@@ -324,14 +324,22 @@ work created while that folder is open is filed there. Collapsed panes include s
 can expand on click or hover. Expanded panes are layered over neighboring icons. Grid, status,
 category, and newest-first auto-arrange controls persist the resulting coordinates. Expanded panes provide contextual controls for Claude sessions, tasks, runs,
 triggers, Calendar/Slack browser work, abilities, notifications, approvals, and memories. Dispatcher requests
-select the newest live `cc-assistant-controller`, enter the existing cross-session approval path,
-and arrive as `CC_ASSISTANT_DISPATCH_V1` envelopes. Time and notification triggers can use the
+select the newest live `cc-assistant-controller` and arrive as `CC_ASSISTANT_DISPATCH_V1`
+envelopes. Manual mode leaves the cross-session delivery approval pending. Automatic and Bypass
+resolve only that internal delivery approval immediately and keep its audit record; all downstream
+protected actions retain separate approvals. Time and notification triggers can use the
 `dispatcher` action kind, but cannot approve their own delivery. The canonical decomposition,
 subtask, and structured-result contract lives in `prompts/controller.md`; operational details are
 in `docs/dispatcher.md`.
 Completed terminal work is hidden from the base canvas and exposed through the counted virtual
 Archive folder; records remain durable. Manual, Automatic, and Bypass mode buttons in the dispatcher
 header apply to newly proposed controller sessions and do not mutate a running controller.
+
+Each new canvas record also has durable `workspace_item_provenance` metadata and typed
+`workspace_item_links`. The dispatcher envelope carries the exact prompt, origin run, and creator
+session; the controller refines downstream records through `workspace_provenance_link`. The
+Simplified canvas renders the graph as curved arrows with trace badges and uses directed visible
+descendants for branch-scoped right-click actions. See `docs/provenance-graph.md`.
 
 ### Abilities and native helpers
 
@@ -358,8 +366,9 @@ pnpm controller:sandbox
 Background launchers create a real Claude Code session; use the printed short ID with
 `claude attach <id>`. Automatic mode is now the default for controller and dispatched Claude
 sessions. Manual remains selectable, while bypass mode removes Claude's prompts and must be
-limited to an independently isolated environment. None of these modes bypass cc-assistant's
-separate durable approval ledger.
+limited to an independently isolated environment. Automatic and Bypass auto-resolve only the
+internal dispatcher prompt-delivery approval; the resolved ledger entry remains, and other
+protected actions retain their independent approvals.
 
 The launcher always passes an explicit controller settings file. Both controller profiles enable
 the checkout's declared project MCP server, allowing background sessions to start without waiting

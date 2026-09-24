@@ -11,12 +11,16 @@ import {
   ScheduleSchema,
   SetWorkspaceItemLayoutSchema,
   TrashWorkspaceItemSchema,
+  UpsertWorkspaceProvenanceSchema,
   UpdateScheduleSchema,
   UpdateWorkspaceFolderSchema,
   WorkspaceFolderSchema,
+  WorkspaceEntityRefSchema,
   WorkspaceItemPlacementSchema,
   WorkspaceItemLayoutSchema,
+  WorkspaceItemLinkSchema,
   WorkspaceTrashedItemSchema,
+  WorkspaceItemProvenanceSchema,
   type AbilityManifest,
   type AssistantEvent,
   type AssistantNotification,
@@ -27,10 +31,13 @@ import {
   type Schedule,
   type SetWorkspaceItemLayoutInput,
   type TrashWorkspaceItemInput,
+  type UpsertWorkspaceProvenanceInput,
   type UpdateWorkspaceFolderInput,
   type WorkspaceFolder,
   type WorkspaceItemPlacement,
   type WorkspaceItemLayout,
+  type WorkspaceItemLink,
+  type WorkspaceItemProvenance,
   type WorkspaceTrashedItem,
 } from "@cc-assistant/shared";
 
@@ -91,6 +98,31 @@ function mapWorkspaceItemLayout(row: Row): WorkspaceItemLayout {
 function mapWorkspaceTrashedItem(row: Row): WorkspaceTrashedItem {
   return WorkspaceTrashedItemSchema.parse({
     itemType: row.item_type, itemId: row.item_id, trashedAt: row.trashed_at,
+  });
+}
+
+function mapWorkspaceItemProvenance(row: Row): WorkspaceItemProvenance {
+  return WorkspaceItemProvenanceSchema.parse({
+    itemType: row.item_type,
+    itemId: row.item_id,
+    prompt: row.prompt,
+    createdBy: row.creator_type && row.creator_id
+      ? { itemType: row.creator_type, itemId: row.creator_id }
+      : null,
+    parent: row.parent_type && row.parent_id
+      ? { itemType: row.parent_type, itemId: row.parent_id }
+      : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function mapWorkspaceItemLink(row: Row): WorkspaceItemLink {
+  return WorkspaceItemLinkSchema.parse({
+    from: { itemType: row.from_type, itemId: row.from_id },
+    to: { itemType: row.to_type, itemId: row.to_id },
+    relation: row.relation,
+    createdAt: row.created_at,
   });
 }
 
@@ -184,6 +216,23 @@ export class AssistantRepository {
       );
       CREATE INDEX IF NOT EXISTS workspace_trashed_items_time_idx
         ON workspace_trashed_items(trashed_at DESC);
+      CREATE TABLE IF NOT EXISTS workspace_item_provenance (
+        item_type TEXT NOT NULL, item_id TEXT NOT NULL, prompt TEXT,
+        creator_type TEXT, creator_id TEXT, parent_type TEXT, parent_id TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY(item_type, item_id)
+      );
+      CREATE TABLE IF NOT EXISTS workspace_item_links (
+        from_type TEXT NOT NULL, from_id TEXT NOT NULL,
+        to_type TEXT NOT NULL, to_id TEXT NOT NULL,
+        relation TEXT NOT NULL CHECK (relation IN ('created','derived','requires','related')),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(from_type, from_id, to_type, to_id, relation)
+      );
+      CREATE INDEX IF NOT EXISTS workspace_item_links_from_idx
+        ON workspace_item_links(from_type, from_id, created_at);
+      CREATE INDEX IF NOT EXISTS workspace_item_links_to_idx
+        ON workspace_item_links(to_type, to_id, created_at);
       CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, source TEXT NOT NULL,
         occurred_at TEXT NOT NULL, entity_type TEXT, entity_id TEXT, payload_json TEXT NOT NULL
@@ -433,6 +482,74 @@ export class AssistantRepository {
     this.#event("workspace_item.restored", input.itemType, input.itemId, {
       itemType: input.itemType, itemId: input.itemId, restored: Number(result.changes) > 0,
     });
+  }
+
+  listWorkspaceItemProvenance(): WorkspaceItemProvenance[] {
+    return (this.#db.prepare("SELECT * FROM workspace_item_provenance ORDER BY created_at").all() as Row[])
+      .map(mapWorkspaceItemProvenance);
+  }
+
+  listWorkspaceItemLinks(): WorkspaceItemLink[] {
+    return (this.#db.prepare("SELECT * FROM workspace_item_links ORDER BY created_at").all() as Row[])
+      .map(mapWorkspaceItemLink);
+  }
+
+  upsertWorkspaceProvenance(rawInput: UpsertWorkspaceProvenanceInput): WorkspaceItemProvenance {
+    const input = UpsertWorkspaceProvenanceSchema.parse(rawInput);
+    const now = new Date().toISOString();
+    const current = this.#db.prepare(
+      "SELECT * FROM workspace_item_provenance WHERE item_type=? AND item_id=?",
+    ).get(input.item.itemType, input.item.itemId) as Row | undefined;
+    const createdAt = current ? String(current.created_at) : now;
+    const prompt: string | null = input.prompt !== undefined
+      ? input.prompt
+      : typeof current?.prompt === "string" ? current.prompt : null;
+    const createdBy = input.createdBy !== undefined
+      ? input.createdBy
+      : current?.creator_type && current.creator_id
+        ? WorkspaceEntityRefSchema.parse({ itemType: current.creator_type, itemId: current.creator_id })
+        : null;
+    const parent = input.parent !== undefined
+      ? input.parent
+      : current?.parent_type && current.parent_id
+        ? WorkspaceEntityRefSchema.parse({ itemType: current.parent_type, itemId: current.parent_id })
+        : null;
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      this.#db.prepare(`INSERT INTO workspace_item_provenance
+        (item_type, item_id, prompt, creator_type, creator_id, parent_type, parent_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(item_type, item_id) DO UPDATE SET prompt=excluded.prompt,
+        creator_type=excluded.creator_type, creator_id=excluded.creator_id,
+        parent_type=excluded.parent_type, parent_id=excluded.parent_id, updated_at=excluded.updated_at`)
+        .run(input.item.itemType, input.item.itemId, prompt,
+          createdBy?.itemType ?? null, createdBy?.itemId ?? null,
+          parent?.itemType ?? null, parent?.itemId ?? null, createdAt, now);
+      const link = this.#db.prepare(`INSERT OR IGNORE INTO workspace_item_links
+        (from_type, from_id, to_type, to_id, relation, created_at) VALUES (?, ?, ?, ?, ?, ?)`);
+      if (input.createdBy !== undefined) {
+        this.#db.prepare("DELETE FROM workspace_item_links WHERE to_type=? AND to_id=? AND relation='created'")
+          .run(input.item.itemType, input.item.itemId);
+      }
+      if (input.parent !== undefined) {
+        this.#db.prepare("DELETE FROM workspace_item_links WHERE to_type=? AND to_id=? AND relation='derived'")
+          .run(input.item.itemType, input.item.itemId);
+      }
+      if (createdBy) link.run(createdBy.itemType, createdBy.itemId, input.item.itemType, input.item.itemId, "created", now);
+      if (parent) link.run(parent.itemType, parent.itemId, input.item.itemType, input.item.itemId, "derived", now);
+      for (const related of input.relatedTo) {
+        link.run(input.item.itemType, input.item.itemId, related.itemType, related.itemId, "related", now);
+      }
+      this.#db.exec("COMMIT");
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
+    const row = this.#db.prepare("SELECT * FROM workspace_item_provenance WHERE item_type=? AND item_id=?")
+      .get(input.item.itemType, input.item.itemId) as Row;
+    const provenance = mapWorkspaceItemProvenance(row);
+    this.#event("workspace_item.provenance", input.item.itemType, input.item.itemId, { provenance });
+    return provenance;
   }
 
   listWorkspaceItemLayouts(): WorkspaceItemLayout[] {

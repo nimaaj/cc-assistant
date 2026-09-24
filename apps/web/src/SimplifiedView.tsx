@@ -2,12 +2,16 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEven
 import {
   Background,
   Controls,
+  Handle,
+  MarkerType,
   MiniMap,
   Panel,
+  Position,
   ReactFlow,
   SelectionMode,
   useNodesState,
   type Node,
+  type Edge,
   type NodeProps,
   type OnNodeDrag,
   type ReactFlowInstance,
@@ -36,6 +40,9 @@ import type {
   WorkspaceItemPlacement,
   WorkspaceItemType,
   WorkspaceTrashedItem,
+  WorkspaceItemLink,
+  WorkspaceItemProvenance,
+  WorkspaceProvenanceGraph,
 } from "@cc-assistant/shared";
 import { isMainControllerName, runtimeSlashCommands } from "@cc-assistant/shared";
 import {
@@ -82,13 +89,15 @@ type CanvasNodeData = {
   count?: number;
   onOpen?: () => void;
   dropActive?: boolean;
+  provenance?: WorkspaceItemProvenance | undefined;
+  connectionCount?: number;
   arrange: CanvasArrangeDescriptor;
 };
 type CanvasFlowNode = Node<CanvasNodeData>;
 type CanvasEntry = { item: DraggableItem; content: ReactNode };
 const ARCHIVE_FOLDER_ID = "system-archive";
 const TRASH_FOLDER_ID = "system-trash";
-type CanvasContextMenu = { nodeId: string; nodeIds: string[]; x: number; y: number };
+type CanvasContextMenu = { nodeId: string; nodeIds: string[]; scope: "item" | "selection" | "branch"; x: number; y: number };
 type DiagnosticMessage = { id: number; level: "info" | "error"; text: string; at: string };
 type TranscriptWindow = {
   id: string;
@@ -205,6 +214,35 @@ export function contextSelectionIds(clickedId: string, rememberedSelection: Iter
   return selected.length > 1 && selected.includes(clickedId) ? selected : [clickedId];
 }
 
+function flowNodeId(itemType: WorkspaceCanvasEntityType, itemId: string): string {
+  return itemType === "browser_worker" && itemId === "calendar-slack"
+    ? "system:browser-worker"
+    : `item:${placementKey(itemType, itemId)}`;
+}
+
+/** Return the root and all directed descendants that currently have canvas nodes. */
+export function graphBranchNodeIds(
+  rootNodeId: string,
+  links: WorkspaceItemLink[],
+  availableNodeIds: ReadonlySet<string>,
+): string[] {
+  const outgoing = new Map<string, string[]>();
+  for (const link of links) {
+    const from = flowNodeId(link.from.itemType, link.from.itemId);
+    const to = flowNodeId(link.to.itemType, link.to.itemId);
+    outgoing.set(from, [...(outgoing.get(from) ?? []), to]);
+  }
+  const visited = new Set<string>();
+  const pending = [rootNodeId];
+  while (pending.length > 0) {
+    const current = pending.shift()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    for (const child of outgoing.get(current) ?? []) pending.push(child);
+  }
+  return [...visited].filter((id) => availableNodeIds.has(id));
+}
+
 export function visibleArchiveCount(archived: Iterable<string>, trashed: ReadonlySet<string>): number {
   return [...archived].filter((key) => !trashed.has(key)).length;
 }
@@ -312,7 +350,23 @@ function CompactPane({ type, title, description, status, expandOnHover, children
 }
 
 function PaneFlowNode({ data }: NodeProps<CanvasFlowNode>): React.JSX.Element {
-  return <>{data.content}</>;
+  const trace = data.provenance;
+  const traceTitle = trace
+    ? [
+      trace.prompt ? `Prompt: ${trace.prompt}` : undefined,
+      trace.createdBy ? `Created by ${trace.createdBy.itemType}:${trace.createdBy.itemId}` : undefined,
+      trace.parent ? `Parent ${trace.parent.itemType}:${trace.parent.itemId}` : undefined,
+      `${data.connectionCount ?? 0} graph connection${data.connectionCount === 1 ? "" : "s"}`,
+    ].filter(Boolean).join("\n")
+    : `${data.connectionCount ?? 0} graph connections`;
+  return <div className="canvas-graph-node">
+    <Handle type="target" position={Position.Left} isConnectable={false} />
+    {data.content}
+    {(trace || data.connectionCount) ? <div className="provenance-badge nodrag" title={traceTitle}>
+      <span>↳</span><strong>{trace?.createdBy ? shortTitle(trace.createdBy.itemType.replaceAll("_", " ")) : "Linked"}</strong><small>{data.connectionCount ?? 0}</small>
+    </div> : null}
+    <Handle type="source" position={Position.Right} isConnectable={false} />
+  </div>;
 }
 
 function FolderFlowNode({ data }: NodeProps<CanvasFlowNode>): React.JSX.Element {
@@ -360,6 +414,7 @@ export function SimplifiedView({
   placements,
   layouts,
   trashedItems,
+  provenance,
   defaultCwd,
   onChange,
 }: {
@@ -377,6 +432,7 @@ export function SimplifiedView({
   placements: WorkspaceItemPlacement[];
   layouts: WorkspaceItemLayout[];
   trashedItems: WorkspaceTrashedItem[];
+  provenance: WorkspaceProvenanceGraph;
   defaultCwd: string;
   onChange: () => void;
 }): React.JSX.Element {
@@ -620,13 +676,19 @@ export function SimplifiedView({
       if (selectedFolder) {
         await Promise.all([
           moveWorkspaceItem({ itemType: "run", itemId: proposal.run.id, folderId: selectedFolder.id }),
-          moveWorkspaceItem({ itemType: "approval", itemId: proposal.approval.id, folderId: selectedFolder.id }),
+          ...(proposal.approval.status === "pending"
+            ? [moveWorkspaceItem({ itemType: "approval", itemId: proposal.approval.id, folderId: selectedFolder.id })]
+            : []),
         ]);
       }
       setRequest("");
-      setFeedback(selectedFolder
-        ? `Dispatcher request queued in “${selectedFolder.name}” for one-time approval.`
-        : "Dispatcher request queued for one-time approval.");
+      setFeedback(proposal.approval.status === "pending"
+        ? (selectedFolder
+          ? `Dispatcher request queued in “${selectedFolder.name}” for one-time approval.`
+          : "Dispatcher request queued for one-time approval.")
+        : (selectedFolder
+          ? `Dispatcher request delivered automatically in “${selectedFolder.name}”.`
+          : "Dispatcher request delivered automatically."));
       onChange();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach the dispatcher");
@@ -983,6 +1045,14 @@ export function SimplifiedView({
     return { category: "Ability", status: "neutral", time: 0 };
   };
   const canvasColumns = 7;
+  const provenanceByItem = new Map(provenance.items.map((record) => [placementKey(record.itemType, record.itemId), record]));
+  const connectionCountByItem = new Map<string, number>();
+  for (const link of provenance.links) {
+    for (const ref of [link.from, link.to]) {
+      const key = placementKey(ref.itemType, ref.itemId);
+      connectionCountByItem.set(key, (connectionCountByItem.get(key) ?? 0) + 1);
+    }
+  }
   const baseOpen = folderFilter === null;
   const archiveFolder: WorkspaceFolder = {
     id: ARCHIVE_FOLDER_ID, name: "Archive", icon: "archive",
@@ -1007,14 +1077,30 @@ export function SimplifiedView({
     })) : []),
     ...canvasEntries.map(({ item: entryItem, content }, index): CanvasFlowNode => ({
       id: `item:${placementKey(entryItem.itemType, entryItem.itemId)}`, type: "pane", position: layoutByItem.get(placementKey(entryItem.itemType, entryItem.itemId)) ?? defaultCanvasPosition(index + (baseOpen ? folders.length + 2 : 0), canvasColumns),
-      data: { kind: "item", item: entryItem, entity: entryItem, content, arrange: { id: `item:${placementKey(entryItem.itemType, entryItem.itemId)}`, title: entryItem.title, ...arrangementMetadata(entryItem) } },
+      data: { kind: "item", item: entryItem, entity: entryItem, content, provenance: provenanceByItem.get(placementKey(entryItem.itemType, entryItem.itemId)), connectionCount: connectionCountByItem.get(placementKey(entryItem.itemType, entryItem.itemId)) ?? 0, arrange: { id: `item:${placementKey(entryItem.itemType, entryItem.itemId)}`, title: entryItem.title, ...arrangementMetadata(entryItem) } },
     })),
     ...(baseOpen ? [{
       id: "system:browser-worker", type: "pane", position: layoutByItem.get(placementKey("browser_worker", "calendar-slack")) ?? defaultCanvasPosition(canvasEntries.length + folders.length + 2, canvasColumns),
-      data: { kind: "system" as const, entity: { itemType: "browser_worker" as const, itemId: "calendar-slack", title: "Calendar & Slack worker" }, arrange: { id: "system:browser-worker", title: "Calendar & Slack worker", category: "System", status: browserStatus.state === "running" ? "running" : browserStatus.state === "ready" ? "idle" : browserStatus.state === "error" ? "attention" : "stopped", time: Date.parse(browserStatus.lastCompletedAt ?? "") || 0 }, content:
+      data: { kind: "system" as const, entity: { itemType: "browser_worker" as const, itemId: "calendar-slack", title: "Calendar & Slack worker" }, provenance: provenanceByItem.get(placementKey("browser_worker", "calendar-slack")), connectionCount: connectionCountByItem.get(placementKey("browser_worker", "calendar-slack")) ?? 0, arrange: { id: "system:browser-worker", title: "Calendar & Slack worker", category: "System", status: browserStatus.state === "running" ? "running" : browserStatus.state === "ready" ? "idle" : browserStatus.state === "error" ? "attention" : "stopped", time: Date.parse(browserStatus.lastCompletedAt ?? "") || 0 }, content:
         <CompactPane type="Browser" title="Calendar & Slack worker" description={sentence(`The signed-in browser worker is ${browserStatus.state}`, "Browser integration status")} status={browserStatus.state === "running" ? "running" : browserStatus.state === "ready" ? "idle" : browserStatus.state === "error" ? "attention" : "stopped"} expandOnHover={expandOnHover}><p>{browserStatus.lastError ?? (browserStatus.lastCompletedAt ? `Last completed ${formatTime(browserStatus.lastCompletedAt)}` : "No recent browser activity.")}</p><div className="compact-actions wrap"><button disabled={busy?.startsWith("browser:")} onClick={() => void queueBrowserAction("calendar")}>Refresh Calendar</button><button disabled={busy?.startsWith("browser:")} onClick={() => void queueBrowserAction("slack")}>Check Slack unread</button></div></CompactPane> },
     } satisfies CanvasFlowNode] : []),
   ];
+  const visibleNodeIds = new Set(desiredFlowNodes.map((node) => node.id));
+  const flowEdges: Edge[] = provenance.links.flatMap((link) => {
+    const source = flowNodeId(link.from.itemType, link.from.itemId);
+    const target = flowNodeId(link.to.itemType, link.to.itemId);
+    if (!visibleNodeIds.has(source) || !visibleNodeIds.has(target)) return [];
+    return [{
+      id: `provenance:${source}:${target}:${link.relation}`,
+      source,
+      target,
+      type: "bezier",
+      label: link.relation,
+      animated: link.relation === "created" || link.relation === "derived",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      className: `provenance-edge relation-${link.relation}`,
+    } satisfies Edge];
+  });
   const canvasItemCount = canvasEntries.length + (baseOpen ? folders.length + 3 : 0);
   const flowRenderKey = [
     folderFilter ?? "base", expandOnHover, busy ?? "", JSON.stringify(paneInputs), browserStatus.state, browserStatus.lastCompletedAt ?? "", browserStatus.lastError ?? "",
@@ -1022,6 +1108,7 @@ export function SimplifiedView({
     runs.map((value) => `${value.id}:${value.revision}`).join(","), approvals.map((value) => `${value.id}:${value.status}`).join(","), notifications.map((value) => `${value.id}:${value.read}`).join(","),
     schedules.map((value) => `${value.id}:${value.revision}`).join(","), memories.map((value) => `${value.id}:${value.revision}`).join(","), abilities.map((value) => value.id).join(","), browserJobs.map((value) => `${value.id}:${value.status}`).join(","),
     folders.map((value) => `${value.id}:${value.revision}`).join(","), placements.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.folderId}`).join(","), layouts.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.x}:${value.y}`).join(","), trashedItems.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.trashedAt}`).join(","),
+    provenance.items.map((value) => `${placementKey(value.itemType, value.itemId)}:${value.updatedAt}`).join(","), provenance.links.map((value) => `${placementKey(value.from.itemType, value.from.itemId)}:${placementKey(value.to.itemType, value.to.itemId)}:${value.relation}`).join(","),
     canvasNodeRefreshSignature(desiredFlowNodes),
   ].join("|");
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<CanvasFlowNode>(desiredFlowNodes);
@@ -1154,10 +1241,19 @@ export function SimplifiedView({
   const openContextMenu = (event: React.MouseEvent<Element>, node: CanvasFlowNode): void => {
     event.preventDefault();
     event.stopPropagation();
-    const nodeIds = contextSelectionIds(node.id, selectionSnapshot.current);
+    const liveSelection = new Set([
+      ...selectionSnapshot.current,
+      ...(flowInstance.current?.getNodes().filter((candidate) => candidate.selected).map((candidate) => candidate.id) ?? []),
+    ]);
+    const remembered = contextSelectionIds(node.id, liveSelection);
+    const branch = graphBranchNodeIds(node.id, provenance.links, new Set(flowNodes.map((candidate) => candidate.id)));
+    const nodeIds = remembered.length > 1 ? remembered : branch.length > 1 ? branch : remembered;
+    const scope: CanvasContextMenu["scope"] = remembered.length > 1 ? "selection" : branch.length > 1 ? "branch" : "item";
     selectionSnapshot.current = new Set(nodeIds);
-    setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: nodeIds.includes(candidate.id) })));
-    setContextMenu({ nodeId: node.id, nodeIds, x: event.clientX, y: event.clientY });
+    const applySelection = (): void => setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: nodeIds.includes(candidate.id) })));
+    applySelection();
+    window.requestAnimationFrame(applySelection);
+    setContextMenu({ nodeId: node.id, nodeIds, scope, x: event.clientX, y: event.clientY });
   };
   const selectCanvasNode = (event: React.MouseEvent<Element>, node: CanvasFlowNode): void => {
     if (!event.shiftKey) return;
@@ -1166,7 +1262,9 @@ export function SimplifiedView({
     if (nextSelection.has(node.id)) nextSelection.delete(node.id);
     else nextSelection.add(node.id);
     selectionSnapshot.current = nextSelection;
-    setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: nextSelection.has(candidate.id) })));
+    const applySelection = (): void => setFlowNodes((current) => current.map((candidate) => ({ ...candidate, selected: nextSelection.has(candidate.id) })));
+    applySelection();
+    window.requestAnimationFrame(applySelection);
   };
   const contextNode = contextMenu ? flowNodes.find((candidate) => candidate.id === contextMenu.nodeId) : undefined;
   const contextNodes = contextMenu
@@ -1259,7 +1357,7 @@ export function SimplifiedView({
           onKeyDown={dispatcherKeyDown}
           placeholder={'Tell the assistant what outcome you want…\nExample: “Remember the Linux version and environment here.”'} />
         <div className="dispatcher-submit-row">
-          <p>{selectedFolder ? `New dispatcher work will be placed in “${selectedFolder.name}”.` : "New dispatcher work will be placed in the base workspace."} External writes and session messages still require approval. <kbd>Ctrl/⌘ + Enter</kbd> submits.</p>
+          <p>{selectedFolder ? `New dispatcher work will be placed in “${selectedFolder.name}”.` : "New dispatcher work will be placed in the base workspace."} Automatic delivers dispatcher prompts immediately; risky external writes, commands, and destructive controls still require approval. <kbd>Ctrl/⌘ + Enter</kbd> submits.</p>
           <button className="primary" disabled={busy === "dispatcher" || !request.trim() || !mainController}>
             {busy === "dispatcher" ? "Routing…" : "Dispatch"}
           </button>
@@ -1277,7 +1375,7 @@ export function SimplifiedView({
       <div className="workspace-canvas">
         <ReactFlow<CanvasFlowNode>
           nodes={flowNodes}
-          edges={[]}
+          edges={flowEdges}
           nodeTypes={canvasNodeTypes}
           onNodesChange={onFlowNodesChange}
           onNodeDragStart={nodeDragStart}
@@ -1285,6 +1383,9 @@ export function SimplifiedView({
           onNodeDragStop={nodeDragStop}
           onNodeContextMenu={openContextMenu}
           onNodeClick={selectCanvasNode}
+          onSelectionChange={({ nodes }) => {
+            if (!contextMenu) selectionSnapshot.current = new Set(nodes.map((node) => node.id));
+          }}
           onPaneClick={() => setContextMenu(undefined)}
           onInit={(instance) => { flowInstance.current = instance; }}
           onMoveEnd={(_event, viewport) => window.localStorage.setItem("cc-assistant-canvas-viewport", JSON.stringify(viewport))}
@@ -1360,15 +1461,15 @@ export function SimplifiedView({
           {canvasItemCount === 0 ? <Panel position="top-left" className="canvas-empty-panel"><EmptyPane label="No items in this view" /></Panel> : null}
         </ReactFlow>
         {contextMenu && contextNode ? <div className="canvas-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" onClick={(event) => event.stopPropagation()}>
-          <div><strong>{contextNodes.length > 1 ? `${contextNodes.length} selected items` : contextNode.data.arrange.title}</strong><small>{contextNode.data.kind === "folder" ? "Folder" : contextNode.data.arrange.category}</small></div>
+          <div><strong>{contextNodes.length > 1 ? `${contextNodes.length} ${contextMenu.scope === "branch" ? "branch" : "selected"} items` : contextNode.data.arrange.title}</strong><small>{contextNode.data.kind === "folder" ? "Folder" : contextNode.data.arrange.category}</small></div>
           {contextNode.data.kind === "folder" && contextNode.data.folder ? <>
             <button type="button" role="menuitem" onClick={() => { contextNode.data.onOpen?.(); setContextMenu(undefined); }}>Open folder</button>
             {!contextNode.data.systemFolder ? <button type="button" role="menuitem" className="danger" onClick={() => { void removeFolderById(contextNode.data.folder!); setContextMenu(undefined); }}>Delete folder</button> : null}
           </> : null}
           {contextItems.length > 0 && trashOpen ? <button type="button" role="menuitem" onClick={() => { void restoreItems(contextItems); setContextMenu(undefined); }}>Restore to base workspace</button> : null}
-          {contextItems.length > 1 && !trashOpen ? <button type="button" role="menuitem" onClick={() => { void groupItems(contextItems.slice(1), contextItems[0]!); setContextMenu(undefined); }}>Create folder from selected items</button> : null}
+          {contextItems.length > 1 && !trashOpen ? <button type="button" role="menuitem" onClick={() => { void groupItems(contextItems.slice(1), contextItems[0]!); setContextMenu(undefined); }}>Create folder from {contextMenu.scope === "branch" ? "branch" : "selected items"}</button> : null}
           {contextItems.length > 0 && !trashOpen && (selectedFolder || contextItems.some((candidate) => placementByItem.has(placementKey(candidate.itemType, candidate.itemId)))) ? <button type="button" role="menuitem" onClick={() => { void moveItemsToFolder(contextItems, null); setContextMenu(undefined); }}>Remove from folder</button> : null}
-          {contextItems.length > 0 && !trashOpen ? <button type="button" role="menuitem" className="danger" onClick={() => { void trashItems(contextItems); setContextMenu(undefined); }}>Move {contextItems.length > 1 ? "selected items" : "item"} to Trash</button> : null}
+          {contextItems.length > 0 && !trashOpen ? <button type="button" role="menuitem" className="danger" onClick={() => { void trashItems(contextItems); setContextMenu(undefined); }}>Move {contextItems.length > 1 ? (contextMenu.scope === "branch" ? "branch" : "selected items") : "item"} to Trash</button> : null}
         </div> : null}
       </div>
     </section>

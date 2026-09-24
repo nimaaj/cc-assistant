@@ -20,6 +20,7 @@ import {
   type WorkspaceItemPlacement,
   type WorkspaceItemLayout,
   type WorkspaceTrashedItem,
+  type WorkspaceProvenanceGraph,
   MAIN_CONTROLLER_NAME,
 } from "@cc-assistant/shared";
 import {
@@ -51,6 +52,7 @@ import {
   listWorkspaceItemPlacements,
   listWorkspaceItemLayouts,
   listWorkspaceTrashedItems,
+  listWorkspaceProvenance,
   login,
   logout,
   markNotificationRead,
@@ -801,6 +803,7 @@ export default function App(): React.JSX.Element {
   const [workspacePlacements, setWorkspacePlacements] = useState<WorkspaceItemPlacement[]>([]);
   const [workspaceLayouts, setWorkspaceLayouts] = useState<WorkspaceItemLayout[]>([]);
   const [workspaceTrash, setWorkspaceTrash] = useState<WorkspaceTrashedItem[]>([]);
+  const [workspaceProvenance, setWorkspaceProvenance] = useState<WorkspaceProvenanceGraph>({ items: [], links: [] });
   const [defaultCwd, setDefaultCwd] = useState("");
   const [browserStatus, setBrowserStatus] = useState<BrowserAutomationStatus>({
     backend: "claude_in_chrome", enabled: true, state: "stopped", activeJobId: null,
@@ -812,8 +815,8 @@ export default function App(): React.JSX.Element {
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
-      const [nextTasks, nextSessions, nextClaudeAgentSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, nextFolders, nextPlacements, nextLayouts, nextTrash, config, nextBrowserStatus] = await Promise.all([
-        listTasks(), listSessions(), listClaudeAgentSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), listWorkspaceFolders(), listWorkspaceItemPlacements(), listWorkspaceItemLayouts(), listWorkspaceTrashedItems(), getConfig(), getBrowserStatus(),
+      const [nextTasks, nextSessions, nextClaudeAgentSessions, nextRuns, nextApprovals, nextNotifications, nextSchedules, nextMemories, nextAbilities, nextBrowserJobs, nextFolders, nextPlacements, nextLayouts, nextTrash, nextProvenance, config, nextBrowserStatus] = await Promise.all([
+        listTasks(), listSessions(), listClaudeAgentSessions(), listRuns(), listPendingApprovals(), listNotifications(), listSchedules(), listMemories(), listAbilities(), listBrowserJobs(), listWorkspaceFolders(), listWorkspaceItemPlacements(), listWorkspaceItemLayouts(), listWorkspaceTrashedItems(), listWorkspaceProvenance(), getConfig(), getBrowserStatus(),
       ]);
       setTasks(nextTasks);
       setSessions(nextSessions);
@@ -829,6 +832,7 @@ export default function App(): React.JSX.Element {
       setWorkspacePlacements(nextPlacements);
       setWorkspaceLayouts(nextLayouts);
       setWorkspaceTrash(nextTrash);
+      setWorkspaceProvenance(nextProvenance);
       setDefaultCwd(config.allowedRoots[0] ?? "");
       setBrowserStatus(nextBrowserStatus);
       setAuthenticated(true);
@@ -911,6 +915,7 @@ export default function App(): React.JSX.Element {
         placements={workspacePlacements}
         layouts={workspaceLayouts}
         trashedItems={workspaceTrash}
+        provenance={workspaceProvenance}
         browserStatus={browserStatus}
         defaultCwd={defaultCwd}
         onChange={() => void refresh()}
@@ -937,6 +942,7 @@ export default function App(): React.JSX.Element {
         tasks, observedSessions: sessions, claudeSessions: claudeAgentSessions, runs, approvals,
         notifications, schedules, memories, abilities, browserJobs, browserStatus,
         workspaceFolders, workspacePlacements, workspaceLayouts, workspaceTrash,
+        workspaceProvenance,
       }} onChange={() => void refresh()} />
 
       <section className="summary">
