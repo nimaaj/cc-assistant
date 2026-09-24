@@ -86,7 +86,9 @@ zoom buttons, fit-to-view, and a minimap. Its viewport, the **Expand on hover** 
 selected color theme are presentation preferences stored in the current browser.
 Expanded panes receive a dedicated top layer so their controls and details do not disappear behind
 neighboring nodes. The embedded auto-arrange toolbar can create a compact grid or group the visible
-items by status, category, or newest-first time. Auto-arranged coordinates are persisted like manual
+items by status, category, or newest-first time. It uses each node's currently measured dimensions,
+so expanded panes reserve their full width and height instead of overlapping adjacent nodes.
+Auto-arranged coordinates are persisted like manual
 drag positions and work in both the base workspace and an open folder.
 
 The base canvas contains a counted, read-only **Archive** system folder. It automatically collects
@@ -101,7 +103,7 @@ Claude process after **Repair & connect** or **Relaunch dispatcher**. Every deli
 a durable approval record; Automatic and Bypass resolve only this narrow bridge record rather than
 leaving it pending. Changing the selector does not silently alter an already-running Claude process.
 Bypass mode displays an explicit isolation warning. The same area
-offers approved terminal launch, repair, and allowlisted slash commands plus the complete safe
+offers immediate audited terminal launch, approved repair, and approved allowlisted slash commands plus the complete safe
 recipe editor. Next-launch daemon settings are editable; current effective values are shown
 read-only because they require a full daemon restart.
 

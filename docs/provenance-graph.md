@@ -25,6 +25,11 @@ the originating session, the dispatcher run, and relationships that a generic HT
 infer. Creation routes also write safe baseline provenance so items are never silently orphaned if
 an agent stops before the refinement call.
 
+Creation tools that accept an `origin` field perform that refinement as part of the same controller
+action. `task_create` accepts the dispatcher envelope's prompt, creator, parent, and related items,
+then writes the task and graph metadata before returning success. This avoids relying on a second
+optional tool call for the common dispatcher-to-task path.
+
 ## Dispatcher contract
 
 `CC_ASSISTANT_DISPATCH_V1` includes an `origin` object containing the exact prompt, the dispatcher

@@ -43,6 +43,7 @@ import type {
   WorkspaceItemLink,
   WorkspaceItemProvenance,
   WorkspaceProvenanceGraph,
+  WorkspaceEntityRef,
 } from "@cc-assistant/shared";
 import { isMainControllerName, runtimeSlashCommands } from "@cc-assistant/shared";
 import {
@@ -175,6 +176,7 @@ export function arrangeCanvasItems(
   items: CanvasArrangeDescriptor[],
   mode: CanvasArrangeMode,
   columns = 6,
+  sizes: Readonly<Record<string, { width: number; height: number }>> = {},
 ): Record<string, CanvasPosition> {
   const compareTitle = (left: CanvasArrangeDescriptor, right: CanvasArrangeDescriptor): number => left.title.localeCompare(right.title);
   const groups = new Map<string, CanvasArrangeDescriptor[]>();
@@ -189,12 +191,20 @@ export function arrangeCanvasItems(
   }
 
   const positions: Record<string, CanvasPosition> = {};
-  let row = 0;
+  let y = 112;
   for (const group of groups.values()) {
-    group.forEach((candidate, index) => {
-      positions[candidate.id] = { x: 340 + (index % columns) * 160, y: 112 + (row + Math.floor(index / columns)) * 132 };
-    });
-    row += Math.max(1, Math.ceil(group.length / columns)) + (mode === "status" || mode === "category" ? 1 : 0);
+    for (let offset = 0; offset < group.length; offset += columns) {
+      let x = 340;
+      let rowHeight = 132;
+      for (const candidate of group.slice(offset, offset + columns)) {
+        const size = sizes[candidate.id] ?? { width: 136, height: 104 };
+        positions[candidate.id] = { x, y };
+        x += Math.max(160, Math.ceil(size.width) + 28);
+        rowHeight = Math.max(rowHeight, Math.ceil(size.height) + 28);
+      }
+      y += rowHeight;
+    }
+    if (mode === "status" || mode === "category") y += 28;
   }
   return positions;
 }
@@ -225,11 +235,12 @@ export function graphBranchNodeIds(
   rootNodeId: string,
   links: WorkspaceItemLink[],
   availableNodeIds: ReadonlySet<string>,
+  nodeIdForRef: (ref: WorkspaceEntityRef) => string = (ref) => flowNodeId(ref.itemType, ref.itemId),
 ): string[] {
   const outgoing = new Map<string, string[]>();
   for (const link of links) {
-    const from = flowNodeId(link.from.itemType, link.from.itemId);
-    const to = flowNodeId(link.to.itemType, link.to.itemId);
+    const from = nodeIdForRef(link.from);
+    const to = nodeIdForRef(link.to);
     outgoing.set(from, [...(outgoing.get(from) ?? []), to]);
   }
   const visited = new Set<string>();
@@ -718,8 +729,10 @@ export function SimplifiedView({
   ): Promise<void> => {
     setBusy(`runtime:${input.action}`); setError(undefined);
     try {
-      await controlRuntime(input);
-      setFeedback(`${success} Approve the protected runtime action to continue.`);
+      const proposal = await controlRuntime(input);
+      setFeedback(proposal.approval.status === "approved"
+        ? success
+        : `${success} Approve the protected runtime action to continue.`);
       onChange();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not control the runtime");
@@ -994,7 +1007,7 @@ export function SimplifiedView({
       </CompactPane> })),
     ...visibleSessions.map((session) => ({ item: item("claude_session", sessionItemId(session), session.name ?? session.id ?? "Interactive session"), content:
       <CompactPane type="Claude" title={session.name ?? session.id ?? "Interactive session"} description={sentence(`A ${session.kind} Claude session is ${session.waitingFor ?? session.status ?? session.state ?? "saved"}`, "A Claude session")} status={sessionStatus(session)} expandOnHover={expandOnHover}>
-        <p>{session.cwd}</p><textarea aria-label={`Message ${session.name ?? session.id ?? "Claude session"}`} rows={3} value={paneInput(`claude:${sessionItemId(session)}`)} onChange={(event) => setPaneInput(`claude:${sessionItemId(session)}`, event.target.value)} placeholder="Message or continuation prompt…" /><div className="compact-actions wrap"><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "message")}>Send message</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "continue")}>Continue</button><button disabled={busy === `transcript:${sessionItemId(session)}`} onClick={() => void openTranscript(session)}>Transcript</button><button disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_session_terminal", target: session.id ?? session.sessionId ?? session.name ?? "" }, "Terminal launch proposed.")}>Open terminal</button>{session.kind === "background" && session.id ? <><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "stop")}>Stop</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "respawn")}>Respawn</button></> : null}</div>{session.kind === "background" && session.id ? <div className="terminal-connect"><code>claude attach {session.id}</code><button onClick={() => void navigator.clipboard.writeText(`claude attach ${session.id}`).then(() => setFeedback("Attach command copied.")).catch(() => setError("Could not copy the attach command."))}>Copy command</button></div> : <small>Interactive recipe sessions attach through their matching tmux pane.</small>}
+        <p>{session.cwd}</p><textarea aria-label={`Message ${session.name ?? session.id ?? "Claude session"}`} rows={3} value={paneInput(`claude:${sessionItemId(session)}`)} onChange={(event) => setPaneInput(`claude:${sessionItemId(session)}`, event.target.value)} placeholder="Message or continuation prompt…" /><div className="compact-actions wrap"><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "message")}>Send message</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "continue")}>Continue</button><button disabled={busy === `transcript:${sessionItemId(session)}`} onClick={() => void openTranscript(session)}>Transcript</button><button disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_session_terminal", target: session.id ?? session.sessionId ?? session.name ?? "" }, "Terminal launch started.")}>Open terminal</button>{session.kind === "background" && session.id ? <><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "stop")}>Stop</button><button disabled={busy === `session:${sessionItemId(session)}`} onClick={() => void manageClaudeSession(session, "respawn")}>Respawn</button></> : null}</div>{session.kind === "background" && session.id ? <div className="terminal-connect"><code>claude attach {session.id}</code><button onClick={() => void navigator.clipboard.writeText(`claude attach ${session.id}`).then(() => setFeedback("Attach command copied.")).catch(() => setError("Could not copy the attach command."))}>Copy command</button></div> : <small>Interactive recipe sessions attach through their matching tmux pane.</small>}
       </CompactPane> })),
     ...activeRuns.map((run) => ({ item: item("run", run.id, run.title), content:
       <CompactPane type="Run" title={run.title} description={sentence(run.prompt ?? `${run.kind} work is ${run.status.replaceAll("_", " ")}`, "Managed work")} status={runStatus(run)} expandOnHover={expandOnHover}><p>{run.prompt ?? run.result ?? run.cwd}</p><button onClick={() => void cancelRun(run.id).then(onChange)}>Cancel</button></CompactPane> })),
@@ -1053,6 +1066,16 @@ export function SimplifiedView({
       connectionCountByItem.set(key, (connectionCountByItem.get(key) ?? 0) + 1);
     }
   }
+  const currentControllerNodeId = mainController
+    ? flowNodeId("claude_session", sessionItemId(mainController))
+    : undefined;
+  const knownControllerSessionIds = new Set(sessions
+    .filter((session) => isMainControllerName(session.name))
+    .map(sessionItemId));
+  const provenanceFlowNodeId = (ref: WorkspaceEntityRef): string =>
+    ref.itemType === "claude_session" && currentControllerNodeId && knownControllerSessionIds.has(ref.itemId)
+      ? currentControllerNodeId
+      : flowNodeId(ref.itemType, ref.itemId);
   const baseOpen = folderFilter === null;
   const archiveFolder: WorkspaceFolder = {
     id: ARCHIVE_FOLDER_ID, name: "Archive", icon: "archive",
@@ -1064,12 +1087,12 @@ export function SimplifiedView({
   };
   const desiredFlowNodes: CanvasFlowNode[] = [
     ...(baseOpen ? [{
-      id: `folder:${ARCHIVE_FOLDER_ID}`, type: "folder", position: defaultCanvasPosition(0, canvasColumns), draggable: false,
-      data: { kind: "folder" as const, folder: archiveFolder, systemFolder: true, count: archiveCount, onOpen: () => { setFolderFilter(ARCHIVE_FOLDER_ID); setEditingFolder(false); }, arrange: { id: `folder:${ARCHIVE_FOLDER_ID}`, title: "Archive", category: "Folder", status: "complete" as const, time: 0 } },
+      id: `folder:${ARCHIVE_FOLDER_ID}`, type: "folder", position: layoutByItem.get(placementKey("folder", ARCHIVE_FOLDER_ID)) ?? defaultCanvasPosition(0, canvasColumns), draggable: false,
+      data: { kind: "folder" as const, folder: archiveFolder, systemFolder: true, count: archiveCount, onOpen: () => { setFolderFilter(ARCHIVE_FOLDER_ID); setEditingFolder(false); }, entity: { itemType: "folder" as const, itemId: ARCHIVE_FOLDER_ID, title: "Archive" }, arrange: { id: `folder:${ARCHIVE_FOLDER_ID}`, title: "Archive", category: "Folder", status: "complete" as const, time: 0 } },
     } satisfies CanvasFlowNode] : []),
     ...(baseOpen ? [{
-      id: `folder:${TRASH_FOLDER_ID}`, type: "folder", position: defaultCanvasPosition(1, canvasColumns), draggable: false,
-      data: { kind: "folder" as const, folder: trashFolder, systemFolder: true, count: trashedItems.length, onOpen: () => { setFolderFilter(TRASH_FOLDER_ID); setEditingFolder(false); }, arrange: { id: `folder:${TRASH_FOLDER_ID}`, title: "Trash", category: "Folder", status: "stopped" as const, time: 0 } },
+      id: `folder:${TRASH_FOLDER_ID}`, type: "folder", position: layoutByItem.get(placementKey("folder", TRASH_FOLDER_ID)) ?? defaultCanvasPosition(1, canvasColumns), draggable: false,
+      data: { kind: "folder" as const, folder: trashFolder, systemFolder: true, count: trashedItems.length, onOpen: () => { setFolderFilter(TRASH_FOLDER_ID); setEditingFolder(false); }, entity: { itemType: "folder" as const, itemId: TRASH_FOLDER_ID, title: "Trash" }, arrange: { id: `folder:${TRASH_FOLDER_ID}`, title: "Trash", category: "Folder", status: "stopped" as const, time: 0 } },
     } satisfies CanvasFlowNode] : []),
     ...(baseOpen ? folders.map((folder, index): CanvasFlowNode => ({
       id: `folder:${folder.id}`, type: "folder", position: layoutByItem.get(placementKey("folder", folder.id)) ?? defaultCanvasPosition(index + 2, canvasColumns),
@@ -1086,21 +1109,20 @@ export function SimplifiedView({
     } satisfies CanvasFlowNode] : []),
   ];
   const visibleNodeIds = new Set(desiredFlowNodes.map((node) => node.id));
-  const flowEdges: Edge[] = provenance.links.flatMap((link) => {
-    const source = flowNodeId(link.from.itemType, link.from.itemId);
-    const target = flowNodeId(link.to.itemType, link.to.itemId);
-    if (!visibleNodeIds.has(source) || !visibleNodeIds.has(target)) return [];
-    return [{
-      id: `provenance:${source}:${target}:${link.relation}`,
-      source,
-      target,
-      type: "bezier",
-      label: link.relation,
+  const flowEdgeMap = new Map<string, Edge>();
+  for (const link of provenance.links) {
+    const source = provenanceFlowNodeId(link.from);
+    const target = provenanceFlowNodeId(link.to);
+    if (!visibleNodeIds.has(source) || !visibleNodeIds.has(target)) continue;
+    const id = `provenance:${source}:${target}:${link.relation}`;
+    flowEdgeMap.set(id, {
+      id, source, target, type: "bezier", label: link.relation,
       animated: link.relation === "created" || link.relation === "derived",
       markerEnd: { type: MarkerType.ArrowClosed },
       className: `provenance-edge relation-${link.relation}`,
-    } satisfies Edge];
-  });
+    });
+  }
+  const flowEdges = [...flowEdgeMap.values()];
   const canvasItemCount = canvasEntries.length + (baseOpen ? folders.length + 3 : 0);
   const flowRenderKey = [
     folderFilter ?? "base", expandOnHover, busy ?? "", JSON.stringify(paneInputs), browserStatus.state, browserStatus.lastCompletedAt ?? "", browserStatus.lastError ?? "",
@@ -1138,7 +1160,12 @@ export function SimplifiedView({
     return { x: 0, y: 0, zoom: 1 };
   }, []);
   const autoArrange = async (mode: CanvasArrangeMode): Promise<void> => {
-    const positions = arrangeCanvasItems(flowNodes.map((node) => node.data.arrange), mode);
+    const liveNodes = flowInstance.current?.getNodes() ?? flowNodes;
+    const sizes = Object.fromEntries(liveNodes.map((node) => [node.id, {
+      width: node.measured?.width ?? node.width ?? 136,
+      height: node.measured?.height ?? node.height ?? 104,
+    }]));
+    const positions = arrangeCanvasItems(liveNodes.map((node) => node.data.arrange), mode, 6, sizes);
     const arrangedNodes = flowNodes.map((node) => ({ ...node, position: positions[node.id] ?? node.position }));
     setFlowNodes(arrangedNodes);
     setBusy("canvas"); setError(undefined);
@@ -1246,7 +1273,7 @@ export function SimplifiedView({
       ...(flowInstance.current?.getNodes().filter((candidate) => candidate.selected).map((candidate) => candidate.id) ?? []),
     ]);
     const remembered = contextSelectionIds(node.id, liveSelection);
-    const branch = graphBranchNodeIds(node.id, provenance.links, new Set(flowNodes.map((candidate) => candidate.id)));
+    const branch = graphBranchNodeIds(node.id, provenance.links, new Set(flowNodes.map((candidate) => candidate.id)), provenanceFlowNodeId);
     const nodeIds = remembered.length > 1 ? remembered : branch.length > 1 ? branch : remembered;
     const scope: CanvasContextMenu["scope"] = remembered.length > 1 ? "selection" : branch.length > 1 ? "branch" : "item";
     selectionSnapshot.current = new Set(nodeIds);
@@ -1311,7 +1338,7 @@ export function SimplifiedView({
         <button type="button" disabled={busy === "controller-launch" || !defaultCwd} onClick={() => void launchController()}>
           {busy === "controller-launch" ? "Proposing…" : mainController ? "Relaunch dispatcher" : "Repair & connect"}
         </button>
-        <button type="button" disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_terminal" }, "Dispatcher terminal launch proposed.")}>Open terminal</button>
+        <button type="button" disabled={busy?.startsWith("runtime:")} onClick={() => void proposeRuntimeControl({ action: "open_terminal" }, "Dispatcher terminal launch started.")}>Open terminal</button>
         <button type="button" aria-controls="runtime-settings" onClick={() => {
           if (settingsRef.current) settingsRef.current.open = true;
           settingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1357,7 +1384,7 @@ export function SimplifiedView({
           onKeyDown={dispatcherKeyDown}
           placeholder={'Tell the assistant what outcome you want…\nExample: “Remember the Linux version and environment here.”'} />
         <div className="dispatcher-submit-row">
-          <p>{selectedFolder ? `New dispatcher work will be placed in “${selectedFolder.name}”.` : "New dispatcher work will be placed in the base workspace."} Automatic delivers dispatcher prompts immediately; risky external writes, commands, and destructive controls still require approval. <kbd>Ctrl/⌘ + Enter</kbd> submits.</p>
+          <p>{selectedFolder ? `New dispatcher work will be placed in “${selectedFolder.name}”.` : "New dispatcher work will be placed in the base workspace."} Automatic delivers dispatcher prompts immediately; risky external writes, protected commands, and destructive controls still require approval. Explicit terminal-open requests run immediately and remain audited. <kbd>Ctrl/⌘ + Enter</kbd> submits.</p>
           <button className="primary" disabled={busy === "dispatcher" || !request.trim() || !mainController}>
             {busy === "dispatcher" ? "Routing…" : "Dispatch"}
           </button>

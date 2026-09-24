@@ -148,6 +148,28 @@ describe("execution service", () => {
     repository.close();
   });
 
+  it("can narrowly auto-approve an explicitly trusted command while retaining its audit record", async () => {
+    const databasePath = join(tmpdir(), `cc-assistant-execution-auto-${randomUUID()}.sqlite`);
+    paths.push(databasePath);
+    new TaskRepository(databasePath).close();
+    const repository = new ExecutionRepository(databasePath);
+    const config: DaemonConfig = {
+      host: "127.0.0.1", port: 4317, dataDir: tmpdir(), databasePath,
+      accessToken: "test-token-with-at-least-thirty-two-characters", accessTokenPath: "unused",
+      allowedRoots: [tmpdir()],
+    };
+    const service = new ExecutionService(repository, config);
+    const proposed = service.proposeCommand({
+      title: "Trusted local UI action", executable: process.execPath,
+      args: ["-e", "process.stdout.write('opened')"], cwd: tmpdir(),
+    }, { autoApprove: true, approvalNote: "Explicit terminal request" });
+
+    expect(proposed.approval).toMatchObject({ status: "approved", resolutionNote: "Explicit terminal request" });
+    await until(() => repository.getRun(proposed.run.id)?.status === "succeeded", "Auto-approved command did not run", 600);
+    expect(repository.getRun(proposed.run.id)?.result).toBe("Command completed successfully");
+    repository.close();
+  });
+
   it("fails interrupted agent runs and expires their approvals after restart", () => {
     const databasePath = join(tmpdir(), `cc-assistant-execution-${randomUUID()}.sqlite`);
     paths.push(databasePath);

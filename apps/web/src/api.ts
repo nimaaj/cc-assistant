@@ -1,5 +1,6 @@
 import {
   ApprovalListSchema,
+  ApprovalSchema,
   AbilityManifestSchema,
   AssistantNotificationListSchema,
   BrowserAutomationStatusSchema,
@@ -129,8 +130,9 @@ export async function getRuntimeStatus(): Promise<RuntimeStatus> {
   return RuntimeStatusSchema.parse(await request("/api/runtime/status"));
 }
 
-export async function controlRuntime(input: RuntimeControlInput): Promise<void> {
-  await request("/api/runtime/control", { method: "POST", body: JSON.stringify(input) });
+export async function controlRuntime(input: RuntimeControlInput): Promise<{ run: Run; approval: Approval }> {
+  const result = await request("/api/runtime/control", { method: "POST", body: JSON.stringify(input) }) as { run: unknown; approval: unknown };
+  return { run: RunListSchema.shape.runs.element.parse(result.run), approval: ApprovalSchema.parse(result.approval) };
 }
 
 export async function getClaudeTranscript(reference: string): Promise<RuntimeTranscript> {

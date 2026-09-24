@@ -89,6 +89,9 @@ tasks, triggers, browser jobs, abilities, runs, approvals, notifications, and me
 their relevant operations. Drag from anywhere on a collapsed card; drag the empty canvas to pan,
 and Shift-click for a discontinuous selection. Right-click items and folders for contextual
 move, restore, open, and delete actions. Protected work still enters the normal approval flow.
+Auto-arrange measures expanded panes and reserves their full dimensions, preventing arranged items
+from overlapping. Explicit requests to open an attached terminal execute immediately as audited,
+non-destructive UI actions rather than waiting for another approval.
 Curved arrowed links show which session and prompt created each item and how runs, memories, tasks,
 and other records relate. Hover the trace badge for the exact prompt and creator. Right-clicking a
 graph root selects its visible descendant branch; branch-scoped folder and Trash actions then apply
@@ -117,6 +120,12 @@ It verifies build/plugin artifacts, Node and Claude Code, private token permissi
 ```bash
 pnpm build
 pnpm start
+```
+
+Or use the checked startup wrapper, which supports both pnpm and npm and builds only when needed:
+
+```bash
+./start.sh
 ```
 
 The default recipe starts the production daemon and an interactive main dispatcher in the

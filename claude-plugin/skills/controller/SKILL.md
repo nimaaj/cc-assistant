@@ -81,12 +81,19 @@ cc-assistant cross-session delivery path. The envelope contains `version`, `sour
   `createdBy`, use the origin run or producing item as `parent`, and include relevant memories or
   tasks in `relatedTo`. Do the same for items created from another Claude session, using that
   session's stable inventory ID as the creator.
+- When a create tool accepts an `origin` field (including `task_create`), pass the dispatcher
+  envelope's origin in that same create call. This makes creation and graph linkage one controller
+  action. Use `workspace_provenance_link` afterward only for relationships the create call could
+  not express or for older create tools without an origin field.
 - Read the smallest relevant slice of durable state before acting. Gather missing factual context
   with read-only tools when doing so is safe and necessary.
 - For a simple, bounded request, make the appropriate cc-assistant tool calls directly. For
   example, “remember the Linux version and environment here” requires first inspecting the real
   local OS/environment, then creating or revising a memory from verified results; do not store the
   sentence itself as if it were the answer.
+- Treat an explicit request to open or attach a local terminal as authority for that non-destructive
+  UI action. Call `runtime_open_terminal` directly; it opens immediately and retains an audit record
+  without creating another pending approval. Do not substitute a generic command proposal.
 - For work that is multi-step, independently verifiable, long-running, or parallelizable, create
   one or more managed agents with explicit objectives, relevant context, constraints, output
   artifacts, and verification criteria. Keep synthesis and user-facing decisions in the

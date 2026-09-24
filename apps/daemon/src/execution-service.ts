@@ -41,6 +41,11 @@ export interface SessionControlCommand {
   resultProtocol?: "claude_delivery_v1";
 }
 
+export interface CommandProposalOptions {
+  autoApprove?: boolean;
+  approvalNote?: string;
+}
+
 const SECRET_ENV_NAME = /(TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|AUTH|COOKIE|SESSION|BEARER|(^|_)PAT($|_)|SSH_)/i;
 const EXECUTION_CONTROL_ENV_NAME = /^(PATH|NODE_OPTIONS|NODE_PATH|LD_PRELOAD|LD_LIBRARY_PATH|DYLD_.+|BASH_ENV|ENV|SHELLOPTS|PYTHONPATH|PYTHONHOME|RUBYOPT|PERL5OPT)$/i;
 const COMMAND_KILL_GRACE_MS = 2_000;
@@ -158,7 +163,7 @@ export class ExecutionService {
     return run;
   }
 
-  proposeCommand(rawInput: ProposeCommandInput): { run: Run; approval: Approval } {
+  proposeCommand(rawInput: ProposeCommandInput, options: CommandProposalOptions = {}): { run: Run; approval: Approval } {
     const input = ProposeCommandSchema.parse(rawInput);
     const cwd = this.#allowedDirectory(input.cwd);
     if (input.executable.includes("/") && !isAbsolute(input.executable)) {
@@ -181,7 +186,7 @@ export class ExecutionService {
         env: input.env,
       },
     });
-    const approval = this.#repository.createApproval({
+    let approval = this.#repository.createApproval({
       runId: run.id,
       actionType: "run_command",
       summary: `${basename(input.executable)} ${input.args.join(" ")}`.trim(),
@@ -193,7 +198,13 @@ export class ExecutionService {
         env: input.env,
       },
     });
-    return { run, approval };
+    if (options.autoApprove) {
+      approval = this.resolveApproval(approval.id, {
+        decision: "approved",
+        note: options.approvalNote ?? "Automatically approved by a narrowly scoped execution policy",
+      });
+    }
+    return { run: this.#repository.getRun(run.id) ?? run, approval };
   }
 
   proposeSessionControl(input: SessionControlCommand): { run: Run; approval: Approval } {

@@ -155,6 +155,9 @@ export class RuntimeService {
       args,
       cwd: this.#config.allowedRoots.includes(projectRoot) ? projectRoot : (this.#config.allowedRoots[0] ?? projectRoot),
       timeoutMs: input.action.startsWith("open_") ? 30_000 : 120_000,
+    }, {
+      autoApprove: input.action.startsWith("open_"),
+      approvalNote: "Automatically approved because opening an explicitly requested terminal is a non-destructive local UI action",
     });
   }
 }

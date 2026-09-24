@@ -20,6 +20,7 @@ Required:
 - Git.
 - Node.js 24. The repository accepts Node versions `>=24 <27`.
 - pnpm 11.19.0 (recommended), or npm 11 or newer.
+- tmux for the default detached daemon/controller recipe.
 - Claude Code 2.1.257 or newer, signed in to the intended Claude account. Version 2.1.275 or
   newer is recommended for the documented strict controller sandbox settings.
 
@@ -105,7 +106,18 @@ Open `http://127.0.0.1:4318`. Keep the terminal running. Source changes to the d
 
 ### Production-style mode
 
-Build and start the daemon:
+For the simplest startup, run the root shell script:
+
+```bash
+./start.sh
+```
+
+It checks Node.js, tmux, Claude Code, and the selected package manager; installs dependencies and
+builds only when those outputs are missing; starts the detached default recipe; and prints runtime
+and dashboard/attach details. It prefers pnpm when available and otherwise uses npm.
+Use `./start.sh --help` for recipe, package-manager, forced install/build, and skip options.
+
+The equivalent explicit build and start commands are:
 
 ```bash
 pnpm build

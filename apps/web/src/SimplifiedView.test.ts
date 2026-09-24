@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ClaudeAgentSession } from "@cc-assistant/shared";
+import type { ClaudeAgentSession, WorkspaceEntityRef } from "@cc-assistant/shared";
 import {
   arrangeCanvasItems,
   automaticFolderName,
@@ -83,6 +83,16 @@ describe("canvas auto arrangement", () => {
     expect(byTime.approval!.x).toBeGreaterThan(byTime["new-run"]!.x);
   });
 
+  it("reserves measured width and height for expanded panes", () => {
+    const arranged = arrangeCanvasItems(items, "grid", 2, {
+      "old-task": { width: 390, height: 260 },
+      "new-run": { width: 136, height: 104 },
+      approval: { width: 136, height: 104 },
+    });
+    expect(arranged["new-run"]!.x).toBeGreaterThanOrEqual(arranged["old-task"]!.x + 390 + 28);
+    expect(arranged.approval!.y).toBeGreaterThanOrEqual(arranged["old-task"]!.y + 260 + 28);
+  });
+
   it("changes its render signature when a folder badge count changes", () => {
     const node = { id: "folder:test", data: { count: 1, arrange: items[0]! } };
     expect(canvasNodeRefreshSignature([node]))
@@ -112,6 +122,21 @@ describe("canvas context selection", () => {
     ]))).toEqual([
       "item:claude_session:controller", "item:run:run-1", "item:memory:memory-1",
     ]);
+  });
+
+  it("can project a previous dispatcher session onto the current dispatcher icon", () => {
+    const createdAt = "2026-09-23T12:00:00.000Z";
+    const links = [{
+      from: { itemType: "claude_session" as const, itemId: "old-controller" },
+      to: { itemType: "task" as const, itemId: "task-1" },
+      relation: "created" as const,
+      createdAt,
+    }];
+    const resolver = (ref: WorkspaceEntityRef): string =>
+      ref.itemType === "claude_session" ? "item:claude_session:current-controller" : `item:${ref.itemType}:${ref.itemId}`;
+    expect(graphBranchNodeIds("item:claude_session:current-controller", links, new Set([
+      "item:claude_session:current-controller", "item:task:task-1",
+    ]), resolver)).toEqual(["item:claude_session:current-controller", "item:task:task-1"]);
   });
 });
 

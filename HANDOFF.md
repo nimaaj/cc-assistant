@@ -322,7 +322,8 @@ status panes on a zoomable React Flow canvas; the original complete interface re
 workspace. Dropping an item onto another automatically creates a counted folder, and dispatcher
 work created while that folder is open is filed there. Collapsed panes include short titles and
 can expand on click or hover. Expanded panes are layered over neighboring icons. Grid, status,
-category, and newest-first auto-arrange controls persist the resulting coordinates. Expanded panes provide contextual controls for Claude sessions, tasks, runs,
+category, and newest-first auto-arrange controls use measured node dimensions and persist the
+resulting coordinates, so expanded panes reserve enough space. Expanded panes provide contextual controls for Claude sessions, tasks, runs,
 triggers, Calendar/Slack browser work, abilities, notifications, approvals, and memories. Dispatcher requests
 select the newest live `cc-assistant-controller` and arrive as `CC_ASSISTANT_DISPATCH_V1`
 envelopes. Manual mode leaves the cross-session delivery approval pending. Automatic and Bypass

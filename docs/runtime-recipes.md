@@ -34,6 +34,7 @@ permission mode and use tmux split panes. Independent sessions started through
 ## Commands
 
 ```bash
+./start.sh                 # checked startup wrapper; installs/builds only when needed
 pnpm build
 pnpm start                 # start/repair the default recipe, then return
 pnpm recipe:status         # inspect tmux windows and daemon health
@@ -43,8 +44,11 @@ pnpm recipe -- relaunch-dispatcher
 tmux attach-session -t cc-assistant
 ```
 
+`./start.sh --recipe <id>` starts another committed recipe. Select npm explicitly with
+`./start.sh --package-manager npm`; `./start.sh --build` forces a fresh workspace and plugin build.
+
 Use `npm run ...` equivalents when using npm. `pnpm start` is detached by design; use the tmux
-attach command or the dashboard's approved **Open terminal** action for the interactive view.
+attach command or the dashboard's **Open terminal** action for the interactive view.
 `pnpm start:daemon` remains available for a daemon-only production process or an external service
 manager. Development remains `pnpm dev` (daemon plus Vite, no automatic tmux controller).
 
@@ -62,8 +66,9 @@ The Simplified dispatcher header exposes:
   keeps the internal dispatcher-delivery approval pending. Automatic and Bypass resolve only that
   tool-limited delivery approval immediately, while retaining its audit record. Neither setting
   auto-approves commands, browser writes, destructive session controls, or later agent tool use.
-- **Repair**, **Relaunch dispatcher**, and **Open terminal**. Each creates an exact durable command
-  approval before local execution.
+- **Repair**, **Relaunch dispatcher**, and **Open terminal**. Repair and relaunch create exact
+  durable command approvals. An explicitly requested terminal opens immediately because it is a
+  non-destructive local UI action; its command and auto-resolved approval remain in the audit ledger.
 - a visible **Settings** button and disclosure containing the validated runtime recipe editor for
   tmux names, Claude name/model/effort, teammate display, dispatcher Claude-login preference,
   sandbox, Remote Control, restart policy, graphical terminal launcher, and next-launch daemon

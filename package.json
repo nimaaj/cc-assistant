@@ -24,6 +24,7 @@
     "dev:daemon": "node scripts/run-workspaces.mjs dev:daemon",
     "dev:web": "node scripts/run-workspaces.mjs dev:web",
     "start": "node scripts/runtime-recipe.mjs start default",
+    "startup": "bash ./start.sh",
     "start:daemon": "node scripts/run-workspaces.mjs start",
     "recipe": "node scripts/runtime-recipe.mjs",
     "recipe:list": "node scripts/runtime-recipe.mjs list",

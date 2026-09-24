@@ -24,6 +24,12 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import * as z from "zod/v4";
 const client = new DaemonClient({ source: "mcp" });
+const DispatcherOriginInputSchema = z.object({
+  prompt: z.string().max(100_000),
+  createdBy: z.object({ itemType: WorkspaceCanvasEntityTypeSchema, itemId: z.string().min(1).max(500) }),
+  parent: z.object({ itemType: WorkspaceCanvasEntityTypeSchema, itemId: z.string().min(1).max(500) }),
+  relatedTo: z.array(z.object({ itemType: WorkspaceCanvasEntityTypeSchema, itemId: z.string().min(1).max(500) })).max(100).optional(),
+}).strict();
 
 function toolResult(value: unknown) {
   return {
@@ -80,7 +86,7 @@ serveStdio(() => {
     "task_create",
     {
       title: "Create assistant task",
-      description: "Add a task to the user's assistant task list.",
+      description: "Add a task to the user's assistant task list. When handling CC_ASSISTANT_DISPATCH_V1, copy its origin into this call so the task is linked to the dispatcher automatically.",
       inputSchema: {
         title: z.string().trim().min(1).max(240),
         description: z.string().trim().max(20_000).optional(),
@@ -88,14 +94,28 @@ serveStdio(() => {
         status: z.enum(taskStatuses).optional(),
         priority: z.number().int().min(0).max(4).optional(),
         dueAt: z.iso.datetime().nullable().optional(),
+        origin: DispatcherOriginInputSchema.optional(),
       },
     },
-    async (input) => {
+    async ({ origin, ...input }) => {
       const payload = await client.request<{ task: Task }>("/api/tasks", {
         method: "POST",
         body: JSON.stringify(input),
       });
-      return toolResult({ task: TaskSchema.parse(payload.task) });
+      const task = TaskSchema.parse(payload.task);
+      if (origin) {
+        await client.request("/api/workspace/provenance", {
+          method: "PUT",
+          body: JSON.stringify({
+            item: { itemType: "task", itemId: task.id },
+            prompt: origin.prompt,
+            createdBy: origin.createdBy,
+            parent: origin.parent,
+            relatedTo: origin.relatedTo ?? [],
+          }),
+        });
+      }
+      return toolResult({ task });
     },
   );
 
@@ -260,6 +280,19 @@ serveStdio(() => {
       inputSchema: { target: z.string().trim().min(1), action: z.enum(["stop", "respawn", "remove"]) },
     },
     async ({ target, action }) => proposeClaudeControl({ action, target }),
+  );
+
+  server.registerTool(
+    "runtime_open_terminal",
+    {
+      title: "Open an attached terminal",
+      description: "Immediately open a local terminal attached to the main dispatcher, or to a specified Claude session. This non-destructive UI action is audited but does not wait for a second approval.",
+      inputSchema: { target: z.string().trim().min(1).max(240).optional() },
+    },
+    async ({ target }) => toolResult(await client.request("/api/runtime/control", {
+      method: "POST",
+      body: JSON.stringify(target ? { action: "open_session_terminal", target } : { action: "open_terminal" }),
+    })),
   );
 
   server.registerTool(
